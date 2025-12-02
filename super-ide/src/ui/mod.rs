@@ -1,7 +1,9 @@
 //! UI components and web interface for Super IDE
 
 use axum::{
-    extract::{WebSocketUpgrade, WebSocket, State},
+    extract::{WebSocketUpgrade, State},
+    routing::post,
+    extract::ws::WebSocket,
     response::{IntoResponse, Html},
     http::StatusCode,
     routing::get,
@@ -18,7 +20,8 @@ use tokio::net::TcpListener;
 use futures::{StreamExt, SinkExt};
 
 use crate::core::SuperIDE;
-use crate::ai::UserFeedback;
+use crate::config::AIProvider;
+
 use crate::editor::{CompletionContext, CompletionItem};
 
 // WebSocket message types
@@ -156,7 +159,7 @@ async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
         "status": "ok",
         "ide_running": true,
         "documents_open": state.ide.get_state().await.active_tabs.len(),
-        "ai_enabled": state.ide.ai_engine().ai_provider() != &crate::ai::AIProvider::Local,
+        "ai_enabled": state.ide.ai_engine().ai_provider() != &AIProvider::Local,
     }))
 }
 
@@ -476,16 +479,17 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
             });
         }
         ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
-            let feedback = UserFeedback {
-                timestamp: chrono::Utc::now(),
-                suggestion_id,
-                rating,
-                accepted,
-                context,
-            };
+            // TODO: Implement user feedback
+            // let feedback = UserFeedback {
+            //     timestamp: chrono::Utc::now(),
+            //     suggestion_id,
+            //     rating,
+            //     accepted,
+            //     context,
+            // };
             
-            let ai_engine = state.ide.ai_engine();
-            ai_engine.learn_from_feedback(feedback).await;
+            // let ai_engine = state.ide.ai_engine();
+            // ai_engine.learn_from_feedback(feedback).await;
         }
         ClientMessage::CodeChange { document_id, content, position } => {
             let _ = state.event_sender.send(UiEvent::CodeChanged {
@@ -497,6 +501,4 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
     }
 }
 
-// Export for main application
-pub use crate::editor::CompletionContext;
-pub use crate::editor::CompletionItem;
+// Export for main application - removed to avoid conflicts

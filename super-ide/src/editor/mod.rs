@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use anyhow::Result;
 use thiserror::Error;
+use serde::{Deserialize, Serialize};
 
 use crate::config::Configuration;
 use crate::utils::file_manager::FileManager;
@@ -37,6 +38,8 @@ pub struct Document {
     pub syntax_tree: Option<SyntaxTree>,
     pub bookmarks: Vec<Bookmark>,
     pub fold_points: Vec<FoldPoint>,
+    pub cursor_line: usize,
+    pub cursor_column: usize,
 }
 
 /// Syntax tree for code structure
@@ -162,7 +165,7 @@ pub struct CompletionContext {
 }
 
 /// Completion item
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionItem {
     pub label: String,
     pub kind: CompletionKind,
@@ -173,7 +176,7 @@ pub struct CompletionItem {
 }
 
 /// Types of completion items
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CompletionKind {
     Text,
     Method,
@@ -294,6 +297,8 @@ impl Editor {
             syntax_tree: None,
             bookmarks: Vec::new(),
             fold_points: Vec::new(),
+            cursor_line: 0,
+            cursor_column: 0,
         };
         
         let document_arc = Arc::new(RwLock::new(document));
@@ -666,11 +671,7 @@ pub struct SyntaxToken {
     pub column: usize,
 }
 
-// Document extension for cursor position
-impl Document {
-    pub cursor_line: usize,
-    pub cursor_column: usize,
-}
+
 
 impl Default for Document {
     fn default() -> Self {

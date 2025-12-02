@@ -20,7 +20,7 @@ pub enum IdeError {
     Configuration(String),
     
     #[error("AI Engine error: {0}")]
-    AIEngine(String),
+    AiEngine(String),
     
     #[error("Editor error: {0}")]
     Editor(String),
@@ -34,6 +34,7 @@ pub enum IdeError {
 
 /// Main SuperIDE application state
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct SuperIDE {
     /// Core configuration
     config: Arc<RwLock<Configuration>>,
@@ -103,6 +104,7 @@ pub struct UserPreferences {
 
 /// Keyboard shortcuts configuration
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct KeyboardShortcuts {
     pub save: Vec<String>,
     pub format: Vec<String>,
@@ -152,7 +154,7 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = AIEngine::new(&config).await?;
+        let ai_engine = AiEngine::new(AiConfig::from(&config))?;
         let editor = Editor::new(&config).await?;
         let event_bus = EventBus::new();
         
@@ -173,7 +175,7 @@ impl SuperIDE {
     }
     
     /// Get AI engine reference
-    pub fn ai_engine(&self) -> &Arc<AIEngine> {
+    pub fn ai_engine(&self) -> &Arc<AiEngine> {
         &self.ai_engine
     }
     
@@ -276,24 +278,7 @@ impl SuperIDE {
     }
 }
 
-impl Default for UserPreferences {
-    fn default() -> Self {
-        Self {
-            theme: "dark".to_string(),
-            font_size: 14,
-            auto_save: true,
-            ai_assistance: true,
-            collaboration: true,
-            keyboard_shortcuts: KeyboardShortcuts {
-                save: vec!["ctrl+s".to_string()],
-                format: vec!["shift+alt+f".to_string()],
-                run: vec!["ctrl+f5".to_string()],
-                debug: vec!["f5".to_string()],
-                ai_suggestion: vec!["ctrl+space".to_string()],
-            },
-        }
-    }
-}
+
 
 impl Default for AIContext {
     fn default() -> Self {

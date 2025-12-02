@@ -11,10 +11,10 @@ pub mod config;
 pub mod utils;
 
 // Re-export main components
-pub use core::{SuperIDE, IdeResult};
-pub use ai::{AIEngine, AIModel, CodeIntelligence};
-pub use editor::{Editor, CodeBuffer, Document};
-pub use config::{Configuration, Settings};
+pub use core::{SuperIDE, IdeResult, IdeError};
+pub use ai::{AiEngine, AiConfig};
+pub use editor::{Editor};
+pub use config::{Configuration};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

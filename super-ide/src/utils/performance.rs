@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
@@ -43,12 +44,12 @@ pub struct PerformanceMonitor {
 
 /// CPU usage monitor
 struct CpuMonitor {
-    last_cpu_time: Option<rusl::rusl>,
+    last_cpu_time: Option<u64>, // Simplified: just store raw counter
 }
 
 /// Memory usage monitor
 struct MemoryMonitor {
-    last_memory_info: Option<sysinfo::System>,
+    last_memory_info: Option<u64>, // Simplified: just store raw counter
 }
 
 impl PerformanceMonitor {

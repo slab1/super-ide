@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 use tree_sitter::{Parser, Node};
-use crate::ai::{CodeAnalysis, FunctionInfo, VariableInfo, ImportInfo, CodeComplexity};
+// Import types that would be needed for AI analysis (placeholder imports)
+// use crate::ai::{CodeAnalysis, FunctionInfo, VariableInfo, ImportInfo, CodeComplexity};
 
 /// Language-specific parsing and analysis tools
 pub struct LanguageTools {

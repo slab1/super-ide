@@ -26,6 +26,19 @@ pub struct AiConfig {
     pub temperature: f32,
 }
 
+impl From<&crate::config::Configuration> for AiConfig {
+    fn from(config: &crate::config::Configuration) -> Self {
+        Self {
+            enabled: config.ai.enable_local_inference,
+            provider: format!("{:?}", config.ai.provider).to_lowercase(),
+            api_key: config.ai.api_key.clone(),
+            model_name: config.ai.model_path.clone(),
+            max_tokens: config.ai.max_tokens,
+            temperature: config.ai.temperature,
+        }
+    }
+}
+
 impl Default for AiConfig {
     fn default() -> Self {
         Self {
