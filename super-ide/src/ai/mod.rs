@@ -105,6 +105,89 @@ pub struct CodeSuggestion {
     pub confidence: f32,
 }
 
+/// Function information for analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub line_start: u32,
+    pub line_end: u32,
+    pub parameters: Vec<ParameterInfo>,
+    pub return_type: Option<String>,
+    pub complexity: f32,
+    pub signature: Option<String>,
+    pub docstring: Option<String>,
+}
+
+/// Parameter information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterInfo {
+    pub name: String,
+    pub type_hint: Option<String>,
+    pub is_mutable: bool,
+}
+
+/// Variable information for analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariableInfo {
+    pub name: String,
+    pub line: u32,
+    pub column: u32,
+    pub scope: String,
+    pub variable_type: VariableType,
+    pub is_declared: bool,
+    pub var_type: Option<String>,
+    pub is_mutable: bool,
+}
+
+/// Variable types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VariableType {
+    Local,
+    Global,
+    Parameter,
+    Constant,
+}
+
+/// Import information for analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportInfo {
+    pub module_path: String,
+    pub imported_items: Vec<String>,
+    pub line: u32,
+    pub import_type: ImportType,
+}
+
+/// Import types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ImportType {
+    Direct,
+    Wildcard,
+    Aliased,
+}
+
+/// Code complexity metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeComplexity {
+    pub cyclomatic_complexity: u32,
+    pub cognitive_complexity: u32,
+    pub line_count: u32,
+    pub function_count: u32,
+    pub complexity_score: f32,
+    pub maintainability_index: f32,
+    pub lines_of_code: u32,
+    pub nested_depth: u32,
+}
+
+/// Complete code analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeAnalysis {
+    pub functions: Vec<FunctionInfo>,
+    pub variables: Vec<VariableInfo>,
+    pub imports: Vec<ImportInfo>,
+    pub complexity: CodeComplexity,
+    pub metrics: HashMap<String, f32>,
+}
+
 /// Mock AI Engine for demonstration
 pub struct AiEngine {
     config: Arc<RwLock<AiConfig>>,
@@ -136,6 +219,17 @@ impl AiEngine {
     /// Get current configuration
     pub async fn get_config(&self) -> Result<AiConfig> {
         Ok(self.config.read().await.clone())
+    }
+
+    /// Get AI provider information
+    pub async fn ai_provider(&self) -> Result<String> {
+        let config = self.config.read().await;
+        Ok(config.provider.clone())
+    }
+
+    /// Generate completion for given request
+    pub async fn generate_completion(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        self.complete_code(request).await
     }
 
     /// Generate code completion

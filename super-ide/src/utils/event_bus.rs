@@ -121,6 +121,7 @@ pub struct EventBroadcaster {
 
 /// Main event bus
 #[derive(Clone)]
+#[derive(Debug)]
 pub struct EventBus {
     channels: Arc<std::sync::Mutex<HashMap<String, broadcast::Sender<IdeEvent>>>>,
     request_channels: Arc<std::sync::Mutex<HashMap<String, mpsc::UnboundedSender<EventRequest>>>>,

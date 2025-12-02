@@ -5,7 +5,7 @@ use tokio::sync::{Mutex, RwLock};
 use anyhow::Result;
 use thiserror::Error;
 
-use crate::ai::AiEngine;
+use crate::ai::{AiEngine, AiConfig};
 use crate::editor::Editor;
 use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
@@ -28,12 +28,16 @@ pub enum IdeError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     
+    #[error("Editor error: {0}")]
+    EditorError(#[from] crate::editor::EditorError),
+    
     #[error("Database error: {0}")]
     Database(String),
 }
 
 /// Main SuperIDE application state
 #[derive(Clone)]
+#[derive(Debug)]
 #[derive(Debug)]
 pub struct SuperIDE {
     /// Core configuration
@@ -154,8 +158,8 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = AiEngine::new(AiConfig::from(&config))?;
-        let editor = Editor::new(&config).await?;
+        let ai_engine = AiEngine::new(AiConfig::from(&config));
+        let editor = Editor::new(&config).await.map_err(IdeError::Editor)?;
         let event_bus = EventBus::new();
         
         let state = IdeState {
@@ -217,7 +221,7 @@ impl SuperIDE {
                 .to_str()
                 .unwrap_or("Unknown")
                 .to_string(),
-            path: project_path,
+            path: project_path.clone(),
             language: self.detect_language(&project_path).await,
             created_at: chrono::Utc::now(),
             last_opened: chrono::Utc::now(),

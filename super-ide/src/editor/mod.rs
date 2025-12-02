@@ -208,6 +208,7 @@ pub enum CompletionKind {
 }
 
 /// Main editor instance
+#[derive(Debug)]
 pub struct Editor {
     documents: Arc<RwLock<Vec<Arc<RwLock<Document>>>>>,
     active_document: Arc<RwLock<Option<Arc<RwLock<Document>>>>>,
@@ -303,6 +304,12 @@ impl Editor {
         
         let document_arc = Arc::new(RwLock::new(document));
         
+        // Get document ID before moving
+        let document_id = {
+            let doc_read = document_arc.read().await;
+            doc_read.id.clone()
+        };
+        
         // Add to documents list
         {
             let mut documents = self.documents.write().await;
@@ -318,7 +325,7 @@ impl Editor {
         // Parse syntax tree
         self.parse_syntax_tree(&document_arc).await;
         
-        Ok(document_arc.read().await.id.clone())
+        Ok(document_id)
     }
     
     /// Save the active document
@@ -326,21 +333,27 @@ impl Editor {
         let active = self.active_document.read().await;
         if let Some(doc) = active.as_ref() {
             let doc_read = doc.read().await;
-            let content = doc_read.content.read().await;
+            let content = {
+                let content_guard = doc_read.content.read().await;
+                content_guard.clone()
+            };
             
-            self.file_manager.write_file(&doc_read.path, content)
+            self.file_manager.write_file(&doc_read.path, &content)
                 .await
                 .map_err(|e| EditorError::Document(e.to_string()))?;
                 
             // Mark as not modified
+            let doc_id = doc_read.id.clone();
             drop(doc_read);
             drop(active);
             
             let mut active = self.active_document.write().await;
             if let Some(doc) = active.as_mut() {
                 let mut doc_write = doc.write().await;
-                doc_write.is_modified = false;
-                doc_write.last_saved = Some(chrono::Utc::now());
+                if doc_write.id == doc_id {
+                    doc_write.is_modified = false;
+                    doc_write.last_saved = Some(chrono::Utc::now());
+                }
             }
         }
         
@@ -364,6 +377,19 @@ impl Editor {
         let mut documents = self.documents.write().await;
         let mut active = self.active_document.write().await;
         
+        // Check if the document being removed is the active one
+        let is_active = {
+            if let Some(active_doc) = active.as_ref() {
+                if let Ok(active_read) = active_doc.try_read() {
+                    active_read.id == document_id
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        
         // Find and remove the document
         let index = documents.iter().position(|doc| {
             if let Ok(doc_read) = doc.try_read() {
@@ -377,14 +403,10 @@ impl Editor {
             documents.remove(index);
             
             // If this was the active document, select another one
-            if let Some(active_doc) = active.as_ref() {
-                if let Ok(active_read) = active_doc.try_read() {
-                    if active_read.id == document_id {
-                        *active = None;
-                        if !documents.is_empty() {
-                            *active = Some(documents[0].clone());
-                        }
-                    }
+            if is_active {
+                *active = None;
+                if !documents.is_empty() {
+                    *active = Some(documents[0].clone());
                 }
             }
             
@@ -396,8 +418,12 @@ impl Editor {
     
     /// Insert text at cursor position
     pub async fn insert_text(&self, text: &str) -> Result<(), EditorError> {
-        let active = self.active_document.read().await;
-        if let Some(doc) = active.as_ref() {
+        let active_doc_arc = {
+            let active = self.active_document.read().await;
+            active.clone()
+        };
+        
+        if let Some(doc) = active_doc_arc {
             let mut doc_write = doc.write().await;
             let mut content = doc_write.content.write().await;
             
@@ -418,8 +444,12 @@ impl Editor {
     
     /// Delete text at cursor position
     pub async fn delete_text(&self, chars_to_delete: usize) -> Result<(), EditorError> {
-        let active = self.active_document.read().await;
-        if let Some(doc) = active.as_ref() {
+        let active_doc_arc = {
+            let active = self.active_document.read().await;
+            active.clone()
+        };
+        
+        if let Some(doc) = active_doc_arc {
             let mut doc_write = doc.write().await;
             let mut content = doc_write.content.write().await;
             
