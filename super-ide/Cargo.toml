@@ -30,11 +30,9 @@ tree-sitter-python = "0.20"
 tree-sitter-javascript = "0.20"
 tree-sitter-css = "0.20"
 
-# AI and ML
-candle-core = "0.4"
-candle-nn = "0.4"
-candle-transformers = "0.4"
-tokenizers = "0.19"
+# AI and ML (simplified for demo)
+# Note: Full AI features would require model files and proper dependency resolution
+# For this demo, we'll implement a mock AI interface
 
 # File system
 notify = "6.0"
@@ -46,7 +44,6 @@ config = "0.14"
 dotenvy = "0.15"
 
 # Database
-sqlite-hlc = "0.2"
 rusqlite = { version = "0.31", features = ["bundled", "chrono"] }
 
 # Utilities
@@ -62,20 +59,15 @@ lazy_static = "1.4"
 # Development tools
 temp-env = "0.2"
 clap = { version = "4.0", features = ["derive"] }
-clap_complete = "4.0"
 env_logger = "0.10"
 dirs = "5.0"
 lru = "0.12"
-sysinfo = "0.29"
-rusl = "0.1"
 
 [dev-dependencies]
 temp-env = "0.2"
 
 [features]
-default = ["web"]
-web = ["axum", "tower-http"]
-desktop = ["tauri"]
+default = []
 
 [profile.release]
 lto = true

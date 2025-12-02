@@ -5,7 +5,7 @@ use tokio::sync::{Mutex, RwLock};
 use anyhow::Result;
 use thiserror::Error;
 
-use crate::ai::AIEngine;
+use crate::ai::AiEngine;
 use crate::editor::Editor;
 use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
@@ -17,19 +17,19 @@ pub type IdeResult<T> = Result<T, IdeError>;
 #[derive(Error, Debug)]
 pub enum IdeError {
     #[error("Configuration error: {0}")]
-    Configuration(#[from] crate::config::ConfigError),
+    Configuration(String),
     
     #[error("AI Engine error: {0}")]
-    AIEngine(#[from] crate::ai::AIError),
+    AIEngine(String),
     
     #[error("Editor error: {0}")]
-    Editor(#[from] crate::editor::EditorError),
+    Editor(String),
     
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     
     #[error("Database error: {0}")]
-    Database(#[from] rusqlite::Error),
+    Database(String),
 }
 
 /// Main SuperIDE application state
@@ -39,7 +39,7 @@ pub struct SuperIDE {
     config: Arc<RwLock<Configuration>>,
     
     /// AI engine for code intelligence
-    ai_engine: Arc<AIEngine>,
+    ai_engine: Arc<AiEngine>,
     
     /// Code editor instance
     editor: Arc<Mutex<Editor>>,
