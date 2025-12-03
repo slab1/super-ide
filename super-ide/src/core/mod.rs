@@ -32,6 +32,9 @@ pub enum IdeError {
     #[error("Editor error: {0}")]
     EditorError(#[from] crate::editor::EditorError),
     
+    #[error("Terminal error: {0}")]
+    Terminal(#[from] crate::terminal::TerminalError),
+    
     #[error("Database error: {0}")]
     Database(String),
 }

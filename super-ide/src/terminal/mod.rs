@@ -94,6 +94,7 @@ pub enum TerminalError {
 }
 
 /// Terminal session management
+#[derive(Debug)]
 pub struct TerminalManager {
     sessions: Arc<RwLock<HashMap<String, TerminalSession>>>,
     output_senders: Arc<RwLock<HashMap<String, mpsc::UnboundedSender<TerminalOutput>>>>,
@@ -164,9 +165,9 @@ impl TerminalManager {
         }
         
         // Create communication channels
-        let (stdin_tx, mut stdin_rx) = mpsc::unbounded_channel::<String>();
-        let (stdout_tx, stdout_rx) = mpsc::unbounded_channel::<String>();
-        let (stderr_tx, stderr_rx) = mpsc::unbounded_channel::<String>();
+        let (stdin_tx, mut stdin_rx) = mpsc::unbounded_channel::<TerminalInput>();
+        let (stdout_tx, stdout_rx) = mpsc::unbounded_channel::<TerminalOutput>();
+        let (stderr_tx, stderr_rx) = mpsc::unbounded_channel::<TerminalOutput>();
         
         // Store channel senders
         {

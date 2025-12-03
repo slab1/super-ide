@@ -189,6 +189,7 @@ pub struct CodeAnalysis {
 }
 
 /// Mock AI Engine for demonstration
+#[derive(Debug)]
 pub struct AiEngine {
     config: Arc<RwLock<AiConfig>>,
     learning_data: Arc<RwLock<HashMap<String, LearningData>>>,

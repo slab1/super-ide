@@ -84,6 +84,7 @@ impl FileWatcher {
 }
 
 /// Main file manager
+#[derive(Debug)]
 pub struct FileManager {
     watchers: Vec<FileWatcher>,
     event_receiver: mpsc::UnboundedReceiver<FileEvent>,

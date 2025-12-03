@@ -78,6 +78,10 @@ temp-env = "0.2"
 default = ["web"]
 web = []
 
+[[example]]
+name = "terminal_demo"
+path = "examples/terminal_demo.rs"
+
 [profile.release]
 lto = true
 codegen-units = 1
