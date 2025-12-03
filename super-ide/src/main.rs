@@ -37,11 +37,11 @@ struct Args {
     ai: bool,
     
     /// AI provider (local, openai, anthropic)
-    #[arg(short, long, default_value = "local")]
+    #[arg(short = 't', long, default_value = "local")]
     ai_provider: String,
     
     /// API key for cloud AI providers
-    #[arg(short, long)]
+    #[arg(short = 'k', long)]
     api_key: Option<String>,
     
     /// Enable debug logging
@@ -134,6 +134,12 @@ async fn main() -> Result<()> {
     
     // Start web UI
     let mut web_ui = WebUI::new(Arc::new(ide));
+    if let Err(e) = web_ui.start(args.port).await {
+        eprintln!("Error starting web UI: {}", e);
+        return Ok(());
+    }
+    
+    println!("✅ Server running. Press Ctrl+C to stop.");
     
     // Handle graceful shutdown
     tokio::signal::ctrl_c().await?;
