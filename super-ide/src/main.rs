@@ -8,13 +8,14 @@ use super_ide::{
     initialize, SuperIDE, Configuration,
     ui::WebUI,
     utils::performance::global_performance_monitor,
+    config::AIProvider,
 };
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, CommandFactory};
 use anyhow::Result;
 
 /// Command line arguments
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(name = "super-ide")]
 #[command(about = "Super IDE - AI-Powered Development Environment")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -53,7 +54,7 @@ struct Args {
 }
 
 /// Subcommands
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 enum Commands {
     /// Create a new project
     New {
@@ -98,8 +99,8 @@ async fn main() -> Result<()> {
     setup_logging(args.debug)?;
     
     // Handle subcommands
-    if let Some(command) = args.command {
-        return handle_subcommand(command, args).await;
+    if let Some(ref command) = args.command {
+        return handle_subcommand(command.clone(), args.clone()).await;
     }
     
     // Initialize configuration
@@ -128,9 +129,8 @@ async fn main() -> Result<()> {
     // Initialize Super IDE
     let ide = initialize().await?;
     
-    // Start performance monitoring
-    let mut monitor = global_performance_monitor().clone();
-    monitor.start().await;
+    // Performance monitoring is automatically started with global instance
+    let _monitor = global_performance_monitor();
     
     // Start web UI
     let mut web_ui = WebUI::new(Arc::new(ide));
@@ -139,7 +139,9 @@ async fn main() -> Result<()> {
     tokio::signal::ctrl_c().await?;
     println!("\\n🛑 Shutting down Super IDE...");
     
-    web_ui.stop().await?;
+    if let Err(e) = web_ui.stop().await {
+        eprintln!("Error stopping web UI: {}", e);
+    }
     println!("✅ Super IDE stopped gracefully");
     
     Ok(())
@@ -184,9 +186,13 @@ fn setup_logging(debug: bool) -> Result<()> {
 async fn load_configuration(args: &Args) -> Result<Configuration> {
     let mut config = if let Some(config_path) = &args.config {
         // Load from specified file
-        let mut config = Config::new();
-        config = config.merge(config::File::with_name(&config_path.to_string_lossy()))?;
-        config.try_deserialize()?
+        let config = config::Config::builder()
+            .add_source(config::File::with_name(&config_path.to_string_lossy()))
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+        let config: Configuration = config.try_deserialize()
+            .map_err(|e| anyhow::anyhow!("Failed to parse config: {}", e))?;
+        config
     } else {
         // Load default configuration
         Configuration::default()
@@ -205,18 +211,18 @@ async fn load_configuration(args: &Args) -> Result<Configuration> {
 }
 
 /// Parse AI provider from string
-fn parse_ai_provider(provider: &str) -> Result<super_ide::ai::AIProvider> {
+fn parse_ai_provider(provider: &str) -> Result<AIProvider> {
     match provider.to_lowercase().as_str() {
-        "local" => Ok(super_ide::ai::AIProvider::Local),
-        "openai" => Ok(super_ide::ai::AIProvider::OpenAI),
-        "anthropic" => Ok(super_ide::ai::AIProvider::Anthropic),
+        "local" => Ok(AIProvider::Local),
+        "openai" => Ok(AIProvider::OpenAI),
+        "anthropic" => Ok(AIProvider::Anthropic),
         _ => anyhow::bail!("Invalid AI provider: {}. Use 'local', 'openai', or 'anthropic'", provider),
     }
 }
 
 /// Create a new project
 async fn create_new_project(name: &str, template: Option<&str>, args: &Args) -> Result<()> {
-    let workspace = args.workspace.as_ref().unwrap_or(&PathBuf::from("./"));
+    let workspace = args.workspace.as_ref().unwrap_or(&PathBuf::from(".")).clone();
     let project_path = workspace.join(name);
     
     println!("📁 Creating new project '{}' at {}", name, project_path.display());
@@ -555,7 +561,7 @@ fn detect_project_type(path: &PathBuf) -> Result<String> {
             let file_name = entry.file_name();
             let name_str = file_name.to_string_lossy();
             
-            match name_str.as_str() {
+            match name_str.as_ref() {
                 "Cargo.toml" => return Ok("Rust".to_string()),
                 "package.json" => return Ok("JavaScript".to_string()),
                 "setup.py" | "pyproject.toml" => return Ok("Python".to_string()),
@@ -591,17 +597,27 @@ fn generate_completions(shell: &str) -> Result<()> {
     use clap_complete::{generate, shells::*, Generator};
     
     let mut cmd = Args::command();
-    let mut generator: Box<dyn Generator> = match shell.to_lowercase().as_str() {
-        "bash" => Box::new(Bash),
-        "zsh" => Box::new(Zsh),
-        "fish" => Box::new(Fish),
-        "powershell" => Box::new(PowerShell),
+    match shell.to_lowercase().as_str() {
+        "bash" => {
+            let generator = Bash;
+            generate(generator, &mut cmd, "super-ide", &mut std::io::stdout());
+        },
+        "zsh" => {
+            let generator = Zsh;
+            generate(generator, &mut cmd, "super-ide", &mut std::io::stdout());
+        },
+        "fish" => {
+            let generator = Fish;
+            generate(generator, &mut cmd, "super-ide", &mut std::io::stdout());
+        },
+        "powershell" => {
+            let generator = PowerShell;
+            generate(generator, &mut cmd, "super-ide", &mut std::io::stdout());
+        },
         _ => {
             anyhow::bail!("Unsupported shell: {}. Use bash, zsh, fish, or powershell", shell);
         }
     };
-    
-    generate(&mut *generator, &mut cmd, "super-ide", &mut std::io::stdout());
     
     Ok(())
 }
@@ -616,7 +632,10 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
     
     // Start web UI
     let mut web_ui = WebUI::new(Arc::new(ide));
-    web_ui.start(port).await?;
+    if let Err(e) = web_ui.start(port).await {
+        eprintln!("Error starting web UI: {}", e);
+        return Ok(());
+    }
     
     println!("✅ Server running. Press Ctrl+C to stop.");
     
