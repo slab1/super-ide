@@ -90,7 +90,9 @@ impl PerformanceMonitor {
         let interval = self.sampling_interval;
         let start_time_clone = self.start_time;
         let cpu_monitor_clone = self.cpu_monitor.clone();
+        let mut cpu_monitor_clone = cpu_monitor_clone;
         let memory_monitor_clone = self.memory_monitor.clone();
+        let mut memory_monitor_clone = memory_monitor_clone;
         
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
@@ -106,11 +108,11 @@ impl PerformanceMonitor {
                 metrics.uptime_seconds = start_time_clone.elapsed().as_secs();
                 
                 // Update system metrics
-                if let Some(cpu_monitor) = &cpu_monitor_clone {
+                if let Some(cpu_monitor) = &mut cpu_monitor_clone {
                     metrics.cpu_usage = cpu_monitor.get_cpu_usage();
                 }
                 
-                if let Some(memory_monitor) = &memory_monitor_clone {
+                if let Some(memory_monitor) = &mut memory_monitor_clone {
                     metrics.memory_usage_mb = memory_monitor.get_memory_usage();
                 }
                 

@@ -205,10 +205,17 @@ impl EventBus {
                         };
                         let _ = request.respond_with(response);
                     }
-                    EventRequest::ExecuteCommand { command, .. } => {
+                    EventRequest::ExecuteCommand { ref command, .. } => {
                         let response = EventResponse::CommandResult {
                             success: false,
                             output: format!("Command '{}' not implemented", command),
+                        };
+                        let _ = request.respond_with(response);
+                    }
+                    // Handle remaining variants
+                    _ => {
+                        let response = EventResponse::Error {
+                            message: "Unhandled request type".to_string(),
                         };
                         let _ = request.respond_with(response);
                     }
@@ -299,6 +306,9 @@ pub enum EventResponse {
         success: bool,
         output: String,
     },
+    Error {
+        message: String,
+    },
     SaveResult {
         success: bool,
         error: Option<String>,
@@ -336,14 +346,14 @@ impl EventSubscriber {
     }
     
     /// Stream events of a specific type
-    pub async fn stream_of_type<T>(&mut self) -> mpsc::UnboundedReceiver<T>
+    pub async fn stream_of_type<T>(&self, mut _receiver: mpsc::UnboundedReceiver<IdeEvent>) -> mpsc::UnboundedReceiver<T>
     where
         T: for<'de> serde::Deserialize<'de> + Send + 'static,
     {
         let (sender, receiver) = mpsc::unbounded_channel::<T>();
         
         tokio::spawn(async move {
-            while let Ok(event) = self.receiver.recv().await {
+            while let Some(event) = _receiver.recv().await {
                 if let Ok(deserialized) = serde_json::from_value::<T>(
                     serde_json::to_value(event).unwrap()
                 ) {

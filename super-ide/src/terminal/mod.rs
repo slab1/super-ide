@@ -173,7 +173,7 @@ impl TerminalManager {
         {
             let mut output_senders = self.output_senders.write().await;
             output_senders.insert(session_id.to_string(), stdout_tx.clone());
-            output_senders.insert(session_id.to_string() + "_stderr", stderr_tx);
+            output_senders.insert(session_id.to_string() + "_stderr", stderr_tx.clone());
         }
         
         {
@@ -195,6 +195,8 @@ impl TerminalManager {
         let mut stderr = child.stderr.take().unwrap();
         
         let session_id_clone = session_id.to_string();
+        let session_id_clone_for_stdout = session_id_clone.clone();
+        let session_id_clone_for_stderr = session_id_clone.clone();
         let stdout_tx_clone = stdout_tx.clone();
         let stderr_tx_clone = stderr_tx.clone();
         
@@ -207,7 +209,7 @@ impl TerminalManager {
                     Ok(n) => {
                         let data = String::from_utf8_lossy(&buffer[..n]).to_string();
                         let _ = stdout_tx_clone.send(TerminalOutput {
-                            session_id: session_id_clone.clone(),
+                            session_id: session_id_clone_for_stdout.clone(),
                             data,
                             is_error: false,
                             timestamp: chrono::Utc::now(),
@@ -227,7 +229,7 @@ impl TerminalManager {
                     Ok(n) => {
                         let data = String::from_utf8_lossy(&buffer[..n]).to_string();
                         let _ = stderr_tx_clone.send(TerminalOutput {
-                            session_id: session_id_clone.clone(),
+                            session_id: session_id_clone_for_stderr.clone(),
                             data,
                             is_error: true,
                             timestamp: chrono::Utc::now(),
@@ -390,10 +392,11 @@ impl CommandExecutor {
         let start_time = Instant::now();
         
         // For simple command execution, use std::process::Command
+        let command_string = command.to_string();
         let output = tokio::task::spawn_blocking(move || {
             Command::new("sh")
                 .arg("-c")
-                .arg(command)
+                .arg(&command_string)
                 .output()
         })
         .await

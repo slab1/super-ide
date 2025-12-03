@@ -279,7 +279,7 @@ async fn get_completion(
     State(state): State<UiState>,
 ) -> impl IntoResponse {
     // This would handle completion requests
-    Json::<Vec<_>>(vec![])
+    Json::<Vec<CompletionItem>>(vec![])
 }
 
 /// Analyze code using AI

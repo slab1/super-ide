@@ -45,23 +45,24 @@ impl FileWatcher {
         path: P,
         mut event_sender: mpsc::UnboundedSender<FileEvent>,
     ) -> Result<Self, FileManagerError> {
+        let event_sender_clone = event_sender.clone();
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, _>| {
                 if let Ok(event) = res {
                     match event.kind {
                         EventKind::Create(_) => {
                             for path in event.paths {
-                                let _ = event_sender.send(FileEvent::Created(path));
+                                let _ = event_sender_clone.send(FileEvent::Created(path));
                             }
                         }
                         EventKind::Modify(_) => {
                             for path in event.paths {
-                                let _ = event_sender.send(FileEvent::Modified(path));
+                                let _ = event_sender_clone.send(FileEvent::Modified(path));
                             }
                         }
                         EventKind::Remove(_) => {
                             for path in event.paths {
-                                let _ = event_sender.send(FileEvent::Deleted(path));
+                                let _ = event_sender_clone.send(FileEvent::Deleted(path));
                             }
                         }
                         EventKind::Any | EventKind::Access(_) => {
@@ -88,7 +89,6 @@ impl FileWatcher {
 #[derive(Debug)]
 pub struct FileManager {
     watchers: Vec<FileWatcher>,
-    event_receiver: mpsc::UnboundedReceiver<FileEvent>,
 }
 
 impl FileManager {
@@ -118,7 +118,6 @@ impl FileManager {
         
         Ok(Self {
             watchers: Vec::new(),
-            event_receiver,
         })
     }
     
@@ -204,24 +203,24 @@ impl FileManager {
     }
     
     /// Search for files matching a pattern
-    pub async fn search_files(&self, root: &Path, pattern: &str) -> Result<Vec<PathBuf>, FileManagerError> {
+    pub fn search_files(&self, root: &Path, pattern: &str) -> Result<Vec<PathBuf>, FileManagerError> {
         let mut results = Vec::new();
         
         if let Ok(entries) = fs::read_dir(root) {
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
-                    let name = entry.file_name().to_string_lossy();
+                    let name = entry.file_name().to_string_lossy().to_string();
                     
                     if name.contains(pattern) {
                         if entry.metadata()?.is_file() {
-                            results.push(path);
+                            results.push(path.clone());
                         }
                     }
                     
                     // Recursively search subdirectories
                     if path.is_dir() {
-                        let sub_results = self.search_files(&path, pattern).await?;
+                        let sub_results = self.search_files(&path, pattern)?;
                         results.extend(sub_results);
                     }
                 }
