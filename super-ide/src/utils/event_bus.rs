@@ -205,7 +205,7 @@ impl EventBus {
                         };
                         let _ = request.respond_with(response);
                     }
-                    EventRequest::ExecuteCommand { command } => {
+                    EventRequest::ExecuteCommand { command, .. } => {
                         let response = EventResponse::CommandResult {
                             success: false,
                             output: format!("Command '{}' not implemented", command),

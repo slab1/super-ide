@@ -34,6 +34,7 @@ pub enum FileEvent {
 }
 
 /// File change listener
+#[derive(Debug)]
 pub struct FileWatcher {
     watcher: RecommendedWatcher,
     event_sender: mpsc::UnboundedSender<FileEvent>,

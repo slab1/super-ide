@@ -188,7 +188,7 @@ impl TerminalManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(TerminalError::ProcessExecution)?;
+            .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
         
         let mut stdin = child.stdin.take().unwrap();
         let mut stdout = child.stdout.take().unwrap();
@@ -241,7 +241,7 @@ impl TerminalManager {
         // Spawn stdin writer task
         let stdin_task = tokio::spawn(async move {
             while let Some(input) = stdin_rx.recv().await {
-                if let Err(_) = stdin.write_all(input.as_bytes()).await {
+                if let Err(_) = stdin.write_all(input.data.as_bytes()).await {
                     break;
                 }
             }
@@ -354,7 +354,7 @@ impl RealTimeTerminal {
         let output = Command::new(program)
             .args(args)
             .output()
-            .map_err(TerminalError::ProcessExecution)?;
+            .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
         
         let execution_time = start_time.elapsed();
         
@@ -398,7 +398,7 @@ impl CommandExecutor {
         })
         .await
         .map_err(|_| TerminalError::ProcessExecution("Failed to spawn task".to_string()))?
-        .map_err(TerminalError::ProcessExecution)?;
+        .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
         
         let execution_time = start_time.elapsed();
         
@@ -476,7 +476,7 @@ impl Default for CommandExecutor {
 /// Helper function to get terminal size
 pub fn get_terminal_size() -> (u16, u16) {
     terminal_size::terminal_size().map(|(w, h)| {
-        (w.0, h.1)
+        (w.0, h.0)
     }).unwrap_or((80, 24))
 }
 

@@ -130,8 +130,14 @@ impl WebUI {
         
         println!("🚀 Super IDE Web UI starting on http://localhost:{}", port);
         
-        let server = axum::serve(listener, app);
-        self.server_task = Some(tokio::spawn(server));
+        let server = axum::serve(listener, app).with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.ok();
+        });
+        self.server_task = Some(tokio::spawn(async move {
+            if let Err(e) = server.await {
+                eprintln!("Server error: {}", e);
+            }
+        }));
         
         Ok(())
     }
@@ -154,11 +160,15 @@ async fn index() -> impl IntoResponse {
 
 /// Health check endpoint
 async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
+    let ide_state = state.ide.get_state().await;
+    let ai_provider_result = state.ide.ai_engine().ai_provider().await;
+    let ai_provider = ai_provider_result.unwrap_or_else(|_| "local".to_string());
+    
     Json(serde_json::json!({
         "status": "ok",
         "ide_running": true,
-        "documents_open": state.ide.get_state().await.active_tabs.len(),
-        "ai_enabled": state.ide.ai_engine().ai_provider() != &AIProvider::Local,
+        "documents_open": ide_state.active_tabs.len(),
+        "ai_enabled": ai_provider != "local",
     }))
 }
 
@@ -207,17 +217,18 @@ async fn open_file(
     State(state): State<UiState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
+    let path_clone = path.clone();
     let path_buf = std::path::PathBuf::from(path);
     
     let editor = state.ide.editor();
-    let mut editor_lock = editor.lock().await;
+    let editor_lock = editor.lock().await;
     
     match editor_lock.open_file(path_buf).await {
         Ok(document_id) => {
             // Notify via WebSocket
             let _ = state.event_sender.send(UiEvent::FileOpened {
                 document_id: document_id.clone(),
-                file_path: path.to_string(),
+                file_path: path_clone,
             });
             
             Json(serde_json::json!({
@@ -241,7 +252,7 @@ async fn save_document(
     Path(document_id): Path<String>,
 ) -> impl IntoResponse {
     let editor = state.ide.editor();
-    let mut editor_lock = editor.lock().await;
+    let editor_lock = editor.lock().await;
     
     match editor_lock.save_active_document().await {
         Ok(_) => {
@@ -268,7 +279,7 @@ async fn get_completion(
     State(state): State<UiState>,
 ) -> impl IntoResponse {
     // This would handle completion requests
-    Json(vec![])
+    Json::<Vec<_>>(vec![])
 }
 
 /// Analyze code using AI
@@ -283,14 +294,10 @@ async fn analyze_code(
             Json(serde_json::json!({
                 "success": true,
                 "analysis": {
-                    "language": analysis.language,
-                    "complexity": {
-                        "cyclomatic": analysis.complexity.cyclomatic_complexity,
-                        "cognitive": analysis.complexity.cognitive_complexity,
-                        "maintainability": analysis.complexity.maintainability_index,
-                    },
+                    "language": payload.language,
+                    "complexity_score": analysis.complexity_score,
+                    "issues": analysis.issues.len(),
                     "suggestions": analysis.suggestions.len(),
-                    "functions": analysis.functions.len(),
                 }
             }))
         }
@@ -310,12 +317,19 @@ async fn get_ai_suggestion(
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
     
-    match ai_engine.generate_completion(&payload.context, &payload.language).await {
+    let request = crate::ai::CompletionRequest {
+        prompt: payload.context.clone(),
+        context: payload.context,
+        language: payload.language,
+        max_tokens: None,
+    };
+    
+    match ai_engine.generate_completion(request).await {
         Ok(suggestion) => {
             Json(serde_json::json!({
                 "success": true,
-                "suggestion": suggestion,
-                "confidence": 0.85,
+                "suggestion": suggestion.text,
+                "confidence": suggestion.confidence,
                 "type": "completion"
             }))
         }
@@ -393,11 +407,9 @@ async fn websocket_connection(
     // Handle incoming WebSocket messages
     while let Some(msg) = receiver.next().await {
         if let Ok(msg) = msg {
-            if msg.is_text() {
-                if let Ok(text) = msg.to_text() {
-                    if let Ok(client_message) = serde_json::from_str::<ClientMessage>(text) {
-                        handle_client_message(client_message, &state).await;
-                    }
+            if let Ok(text) = msg.to_text() {
+                if let Ok(client_message) = serde_json::from_str::<ClientMessage>(text) {
+                    handle_client_message(client_message, &state).await;
                 }
             }
         } else {

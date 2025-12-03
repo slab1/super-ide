@@ -18,7 +18,7 @@ pub type IdeResult<T> = Result<T, IdeError>;
 #[derive(Error, Debug)]
 pub enum IdeError {
     #[error("Configuration error: {0}")]
-    Configuration(String),
+    ConfigError(String),
     
     #[error("AI Engine error: {0}")]
     AiEngine(String),
@@ -37,6 +37,9 @@ pub enum IdeError {
     
     #[error("Database error: {0}")]
     Database(String),
+    
+    #[error("Configuration error: {0}")]
+    Configuration(#[from] crate::config::ConfigError),
 }
 
 /// Main SuperIDE application state
@@ -65,16 +68,16 @@ pub struct SuperIDE {
 #[derive(Debug, Clone)]
 pub struct IdeState {
     /// Currently open projects
-    projects: Vec<ProjectInfo>,
+    pub projects: Vec<ProjectInfo>,
     
     /// Active editor tabs
-    active_tabs: Vec<EditorTab>,
+    pub active_tabs: Vec<EditorTab>,
     
     /// User preferences and settings
-    preferences: UserPreferences,
+    pub preferences: UserPreferences,
     
     /// Performance metrics
-    performance_metrics: PerformanceMetrics,
+    pub performance_metrics: PerformanceMetrics,
 }
 
 /// Project information
@@ -112,8 +115,7 @@ pub struct UserPreferences {
 }
 
 /// Keyboard shortcuts configuration
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct KeyboardShortcuts {
     pub save: Vec<String>,
     pub format: Vec<String>,
@@ -164,7 +166,7 @@ impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
         let ai_engine = AiEngine::new(AiConfig::from(&config));
-        let editor = Editor::new(&config).await.map_err(IdeError::Editor)?;
+        let editor = Editor::new(&config).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
         // Initialize terminal manager with default config

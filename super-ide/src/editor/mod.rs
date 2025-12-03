@@ -425,12 +425,18 @@ impl Editor {
         
         if let Some(doc) = active_doc_arc {
             let mut doc_write = doc.write().await;
-            let mut content = doc_write.content.write().await;
             
             // Calculate insertion position
-            let position = self.calculate_cursor_position(&content, &doc_write.cursor_line, &doc_write.cursor_column);
+            let position = {
+                let content = doc_write.content.read().await;
+                self.calculate_cursor_position(&content, &doc_write.cursor_line, &doc_write.cursor_column)
+            };
             
-            content.insert_str(position, text);
+            {
+                let mut content = doc_write.content.write().await;
+                content.insert_str(position, text);
+            }
+            
             doc_write.is_modified = true;
             
             // Update cursor position
@@ -451,13 +457,18 @@ impl Editor {
         
         if let Some(doc) = active_doc_arc {
             let mut doc_write = doc.write().await;
-            let mut content = doc_write.content.write().await;
             
             // Calculate deletion position
-            let position = self.calculate_cursor_position(&content, &doc_write.cursor_line, &doc_write.cursor_column);
+            let position = {
+                let content = doc_write.content.read().await;
+                self.calculate_cursor_position(&content, &doc_write.cursor_line, &doc_write.cursor_column)
+            };
             
             if position >= chars_to_delete {
-                content.drain(position - chars_to_delete..position);
+                {
+                    let mut content = doc_write.content.write().await;
+                    content.drain(position - chars_to_delete..position);
+                }
                 doc_write.is_modified = true;
             }
         }
@@ -519,40 +530,52 @@ impl Editor {
     pub async fn format_document(&self) -> Result<(), EditorError> {
         let active = self.active_document.read().await;
         if let Some(doc) = active.as_ref() {
-            let mut doc_write = doc.write().await;
+            // Get content and language to format
+            let (content_to_format, language) = {
+                let doc_read = doc.read().await;
+                let content_clone = {
+                    let content = doc_read.content.read().await;
+                    content.clone()
+                };
+                (content_clone, doc_read.language.clone())
+            };
             
             // Apply formatting based on language
-            let mut content = doc_write.content.write().await;
-            
-            match doc_write.language.as_str() {
+            let formatted_content = match language.as_str() {
                 "Rust" => {
                     // Apply basic Rust formatting (this would use rustfmt)
-                    let lines: Vec<String> = content.lines().map(|line| {
+                    let lines: Vec<String> = content_to_format.lines().map(|line| {
                         line.trim_end().to_string()
                     }).collect();
-                    *content = lines.join("\n");
+                    lines.join("\n")
                 },
                 "Python" => {
                     // Apply Python formatting (this would use black/autopep8)
-                    let lines: Vec<String> = content.lines().map(|line| {
+                    let lines: Vec<String> = content_to_format.lines().map(|line| {
                         line.trim_end().to_string()
                     }).collect();
-                    *content = lines.join("\n");
+                    lines.join("\n")
                 },
                 _ => {
                     // Generic formatting - remove trailing whitespace
-                    let lines: Vec<String> = content.lines().map(|line| {
+                    let lines: Vec<String> = content_to_format.lines().map(|line| {
                         line.trim_end().to_string()
                     }).collect();
-                    *content = lines.join("\n");
+                    lines.join("\n")
                 }
+            };
+            
+            // Update content and mark as modified
+            {
+                let mut doc_write = doc.write().await;
+                {
+                    let mut content = doc_write.content.write().await;
+                    *content = formatted_content;
+                }
+                doc_write.is_modified = true;
             }
             
-            doc_write.is_modified = true;
-            
             // Reparse syntax tree
-            drop(doc_write);
-            drop(active);
             self.parse_syntax_tree(doc).await;
         }
         
@@ -599,14 +622,20 @@ impl Editor {
     
     /// Parse syntax tree for a document
     async fn parse_syntax_tree(&self, document: &Arc<RwLock<Document>>) {
-        let doc_read = document.read().await;
-        let language_support = self.language_support.read().await;
-        let content = doc_read.content.read().await;
+        // Extract content and document info without holding multiple borrows
+        let (content, language) = {
+            let doc_read = document.read().await;
+            let content_clone = {
+                let content = doc_read.content.read().await;
+                content.clone()
+            };
+            (content_clone, doc_read.language.clone())
+        };
         
         // Simple syntax tree generation (would use tree-sitter for real implementation)
         let mut nodes = Vec::new();
         
-        for (line_num, line) in content.lines().enumerate() {
+        for (_line_num, line) in content.lines().enumerate() {
             if line.starts_with("fn ") {
                 nodes.push(SyntaxNode {
                     node_type: "function".to_string(),
@@ -622,8 +651,6 @@ impl Editor {
             nodes,
             root: 0,
         };
-        
-        drop(doc_read);
         
         let mut doc_write = document.write().await;
         doc_write.syntax_tree = Some(syntax_tree);
@@ -655,14 +682,18 @@ impl Editor {
         }
         
         let mut position = 0;
-        for (i, line) in lines.iter().enumerate() {
+        for (i, line_text) in lines.iter().enumerate() {
             if i == *line {
                 break;
             }
-            position += line.len() + 1; // +1 for newline
+            position += line_text.len() + 1; // +1 for newline
         }
         
-        position + column.min(line.len())
+        if *line < lines.len() {
+            position + column.min(&lines[*line].len())
+        } else {
+            position
+        }
     }
     
     /// Get word at cursor

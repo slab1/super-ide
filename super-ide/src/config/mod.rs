@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use thiserror::Error;
 use config::{Config, Environment, File};
+use dirs;
 
 /// Configuration errors
 #[derive(Error, Debug)]
@@ -304,18 +305,13 @@ pub struct KeyboardShortcuts {
 impl Configuration {
     /// Load configuration from default locations
     pub async fn load() -> Result<Self, ConfigError> {
-        let mut config = Config::new();
+        use config::Value;
         
-        // Load from config file
-        let config_paths = Self::get_config_paths();
-        for path in config_paths {
-            if path.exists() {
-                config = config.merge(File::with_name(&path.to_string_lossy()))?;
-            }
-        }
-        
-        // Load from environment variables
-        config = config.merge(Environment::with_prefix("SUPER_IDE"))?;
+        let config = Config::builder()
+            .add_source(config::File::with_name("config/default"))
+            .add_source(Environment::with_prefix("SUPER_IDE"))
+            .build()
+            .map_err(|e| ConfigError::Load(e.to_string()))?;
         
         // Load and validate
         let mut settings: Configuration = config.try_deserialize()
@@ -581,6 +577,3 @@ impl Default for Configuration {
         config
     }
 }
-
-// Import required dependencies
-use dirs;
