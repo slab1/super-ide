@@ -2,10 +2,9 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use super_ide::{
-    initialize, SuperIDE, Configuration,
+    initialize, Configuration,
     ui::WebUI,
     utils::performance::global_performance_monitor,
     config::AIProvider,
@@ -542,7 +541,7 @@ Happy coding with AI assistance! 🚀
 }
 
 /// Import existing project
-async fn import_project(path: &PathBuf, args: &Args) -> Result<()> {
+async fn import_project(path: &PathBuf, _args: &Args) -> Result<()> {
     println!("📂 Importing project from {}", path.display());
     
     if !path.exists() {
@@ -584,7 +583,7 @@ fn detect_project_type(path: &PathBuf) -> Result<String> {
 
 /// Show current configuration
 async fn show_configuration(args: &Args) -> Result<()> {
-    let config = load_configuration(args).await?;
+    let _config = load_configuration(args).await?;
     
     println!("📋 Super IDE Configuration:");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -600,7 +599,7 @@ async fn show_configuration(args: &Args) -> Result<()> {
 
 /// Generate shell completions
 fn generate_completions(shell: &str) -> Result<()> {
-    use clap_complete::{generate, shells::*, Generator};
+    use clap_complete::{generate, shells::*};
     
     let mut cmd = Args::command();
     match shell.to_lowercase().as_str() {
@@ -633,7 +632,7 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
     println!("🖥️ Starting Super IDE server on {}:{}", bind, port);
     
     // Initialize Super IDE in server mode
-    let config = load_configuration(args).await?;
+    let _config = load_configuration(args).await?;
     let ide = initialize().await?;
     
     // Start web UI

@@ -8,11 +8,11 @@
 //! - Integrate with the WebSocket UI for terminal display
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, RwLock, broadcast};
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{Duration, Instant};
 
 use crate::core::IdeResult;
@@ -166,8 +166,8 @@ impl TerminalManager {
         
         // Create communication channels
         let (stdin_tx, mut stdin_rx) = mpsc::unbounded_channel::<TerminalInput>();
-        let (stdout_tx, stdout_rx) = mpsc::unbounded_channel::<TerminalOutput>();
-        let (stderr_tx, stderr_rx) = mpsc::unbounded_channel::<TerminalOutput>();
+        let (stdout_tx, _stdout_rx) = mpsc::unbounded_channel::<TerminalOutput>();
+        let (stderr_tx, _stderr_rx) = mpsc::unbounded_channel::<TerminalOutput>();
         
         // Store channel senders
         {
@@ -201,7 +201,7 @@ impl TerminalManager {
         let stderr_tx_clone = stderr_tx.clone();
         
         // Spawn stdout reader task
-        let stdout_task = tokio::spawn(async move {
+        let _stdout_task = tokio::spawn(async move {
             let mut buffer = vec![0u8; 4096];
             loop {
                 match stdout.read(&mut buffer).await {
@@ -221,7 +221,7 @@ impl TerminalManager {
         });
         
         // Spawn stderr reader task
-        let stderr_task = tokio::spawn(async move {
+        let _stderr_task = tokio::spawn(async move {
             let mut buffer = vec![0u8; 4096];
             loop {
                 match stderr.read(&mut buffer).await {
@@ -241,7 +241,7 @@ impl TerminalManager {
         });
         
         // Spawn stdin writer task
-        let stdin_task = tokio::spawn(async move {
+        let _stdin_task = tokio::spawn(async move {
             while let Some(input) = stdin_rx.recv().await {
                 if let Err(_) = stdin.write_all(input.data.as_bytes()).await {
                     break;
@@ -311,10 +311,10 @@ impl TerminalManager {
         let stdout_sender = output_senders.get(session_id);
         let stderr_sender = output_senders.get(&(session_id.to_string() + "_stderr"));
         
-        if let (Some(stdout_tx), Some(stderr_tx)) = (stdout_sender, stderr_sender) {
+        if let (Some(_stdout_tx), Some(_stderr_tx)) = (stdout_sender, stderr_sender) {
             // In a real implementation, you'd create a combined receiver
             // For now, return the stdout receiver
-            let (tx, rx) = mpsc::unbounded_channel::<TerminalOutput>();
+            let (_tx, _rx) = mpsc::unbounded_channel::<TerminalOutput>();
             
             // This is a simplified implementation
             // In reality, you'd merge stdout and stderr streams

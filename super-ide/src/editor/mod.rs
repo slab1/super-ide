@@ -482,7 +482,7 @@ impl Editor {
         let mut completions = Vec::new();
         
         if let Some(doc) = active.as_ref() {
-            let doc_read = doc.read().await;
+            let _doc_read = doc.read().await;
             let language_support = self.language_support.read().await;
             
             // Find language support
@@ -623,10 +623,10 @@ impl Editor {
     /// Parse syntax tree for a document
     async fn parse_syntax_tree(&self, document: &Arc<RwLock<Document>>) {
         // Extract content and document info without holding multiple borrows
-        let (content, language) = {
-            let doc_read = document.read().await;
+        let (_content, _language) = {
+            let _doc_read = document.read().await;
             let content_clone = {
-                let content = doc_read.content.read().await;
+                let content = _doc_read.content.read().await;
                 content.clone()
             };
             (content_clone, doc_read.language.clone())

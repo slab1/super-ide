@@ -19,7 +19,6 @@ use tokio::net::TcpListener;
 use futures::{StreamExt, SinkExt};
 
 use crate::core::SuperIDE;
-use crate::config::AIProvider;
 
 use crate::editor::{CompletionContext, CompletionItem};
 
@@ -276,7 +275,7 @@ async fn save_document(
 
 /// Get auto-completion suggestions
 async fn get_completion(
-    State(state): State<UiState>,
+    State(_state): State<UiState>,
 ) -> impl IntoResponse {
     // This would handle completion requests
     Json::<Vec<CompletionItem>>(vec![])
@@ -352,7 +351,7 @@ async fn websocket_handler(
 
 /// WebSocket connection handler
 async fn websocket_connection(
-    mut socket: WebSocket,
+    socket: WebSocket,
     state: UiState,
 ) {
     println!("🔗 New WebSocket connection established");
@@ -367,12 +366,12 @@ async fn websocket_connection(
     let event_task = tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
             let message = match event {
-                UiEvent::CodeChanged { document_id, content, position } => {
+                UiEvent::CodeChanged { document_id: _, content: _, position: _ } => {
                     WsMessage::CodeAnalysis {
                         analysis: format!("Code changed in document {} at position {:?}", document_id, position)
                     }
                 },
-                UiEvent::FileOpened { document_id, file_path } => {
+                UiEvent::FileOpened { document_id: _, file_path: _ } => {
                     WsMessage::CodeAnalysis {
                         analysis: format!("Opened file: {}", file_path)
                     }
@@ -489,7 +488,7 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
                 context,
             });
         }
-        ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
+        ClientMessage::SaveFeedback { suggestion_id: _, rating: _, accepted: _, context: _ } => {
             // TODO: Implement user feedback
             // let feedback = UserFeedback {
             //     timestamp: chrono::Utc::now(),

@@ -1,7 +1,7 @@
 //! Performance monitoring and metrics collection for Super IDE
 
 use std::time::{Duration, Instant};
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -125,7 +125,7 @@ impl PerformanceMonitor {
                 // Calculate rolling average response time
                 if !metrics.response_time_ms.is_empty() {
                     let sum: f32 = metrics.response_time_ms.iter().sum();
-                    let avg_response_time = sum / metrics.response_time_ms.len() as f32;
+                    let _avg_response_time = sum / metrics.response_time_ms.len() as f32;
                     // Store average or keep rolling window
                 }
             }
@@ -298,7 +298,7 @@ pub struct OperationMonitor {
 impl OperationMonitor {
     /// Finish monitoring and record the operation
     pub async fn finish(self, operation_type: OperationType) {
-        let duration = self.start_time.elapsed();
+        let _duration = self.start_time.elapsed();
         
         match operation_type {
             OperationType::AiRequest => {

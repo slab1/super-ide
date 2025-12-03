@@ -6,7 +6,6 @@ use anyhow::Result;
 use thiserror::Error;
 use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind};
 use tokio::sync::mpsc;
-use futures::StreamExt;
 
 /// File management errors
 #[derive(Error, Debug)]
@@ -43,7 +42,7 @@ pub struct FileWatcher {
 impl FileWatcher {
     pub fn new<P: AsRef<Path>>(
         path: P,
-        mut event_sender: mpsc::UnboundedSender<FileEvent>,
+        event_sender: mpsc::UnboundedSender<FileEvent>,
     ) -> Result<Self, FileManagerError> {
         let event_sender_clone = event_sender.clone();
         let mut watcher = RecommendedWatcher::new(
@@ -93,7 +92,7 @@ pub struct FileManager {
 
 impl FileManager {
     pub async fn new() -> Result<Self, FileManagerError> {
-        let (event_sender, event_receiver) = mpsc::unbounded_channel();
+        let (_event_sender, event_receiver) = mpsc::unbounded_channel();
         
         // Start background task to handle file events
         tokio::spawn(async move {
@@ -243,7 +242,7 @@ impl FileManager {
     
     /// Unwatch a directory
     pub async fn unwatch_directory(&mut self, path: &Path) -> Result<(), FileManagerError> {
-        self.watchers.retain(|watcher| {
+        self.watchers.retain(|_watcher| {
             // This would need to track which directories are being watched
             // For now, we'll implement a basic version
             true

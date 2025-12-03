@@ -289,16 +289,16 @@ impl SuperIDE {
         log::info!("Starting Super IDE v{}", crate::VERSION);
         
         // Subscribe to AI suggestions
-        let ai_engine = self.ai_engine.clone();
-        let event_bus = self.event_bus.clone();
+        let _ai_engine = self.ai_engine.clone();
+        let _event_bus = self.event_bus.clone();
         tokio::spawn(async move {
             // This would handle AI suggestion events
             log::info!("AI Engine ready for suggestions");
         });
         
         // Subscribe to editor events
-        let editor = self.editor.clone();
-        let event_bus = self.event_bus.clone();
+        let _editor = self.editor.clone();
+        let _event_bus = self.event_bus.clone();
         tokio::spawn(async move {
             // This would handle editor events
             log::info!("Editor event processing started");

@@ -11,7 +11,7 @@ pub struct LanguageTools {
 
 impl LanguageTools {
     pub fn new() -> Self {
-        let mut parsers = HashMap::new();
+        let parsers = HashMap::new();
         
         // Initialize tree-sitter parsers for different languages
         #[cfg(feature = "tree-sitter-rust")]

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use thiserror::Error;
-use config::{Config, Environment, File};
+use config::{Config, Environment};
 use dirs;
 
 /// Configuration errors
@@ -305,8 +305,6 @@ pub struct KeyboardShortcuts {
 impl Configuration {
     /// Load configuration from default locations
     pub async fn load() -> Result<Self, ConfigError> {
-        use config::Value;
-        
         let config = Config::builder()
             .add_source(config::File::with_name("config/default"))
             .add_source(Environment::with_prefix("SUPER_IDE"))
