@@ -280,7 +280,7 @@ pub enum EventRequest {
 
 impl EventRequest {
     /// Attach a response sender to this request
-    fn with_response_sender(self, sender: oneshot::Sender<EventResponse>) -> Self {
+    fn with_response_sender(self, _sender: oneshot::Sender<EventResponse>) -> Self {
         // This is a workaround since we can't modify after move
         self
     }
@@ -366,7 +366,7 @@ pub fn global_event_bus() -> &'static EventBus {
 
 // Implement response sender attachment for EventRequest
 impl EventRequest {
-    fn respond_with(self, response: EventResponse) {
+    fn respond_with(self, _response: EventResponse) {
         // This is a placeholder - in a real implementation,
         // you'd store the response sender in the request
         // and have the handler use it

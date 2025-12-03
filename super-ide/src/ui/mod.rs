@@ -5,7 +5,6 @@ use axum::{
     routing::post,
     extract::ws::WebSocket,
     response::{IntoResponse, Html},
-    http::StatusCode,
     routing::get,
     Router,
     Json,

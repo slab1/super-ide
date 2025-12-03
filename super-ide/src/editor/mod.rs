@@ -1,7 +1,7 @@
 //! Code editor with syntax highlighting, auto-completion, and document management
 
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use anyhow::Result;
 use thiserror::Error;
 use serde::{Deserialize, Serialize};

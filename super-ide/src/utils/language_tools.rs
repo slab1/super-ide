@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use tree_sitter::{Parser, Node};
-use crate::ai::{CodeAnalysis, FunctionInfo, VariableInfo, ImportInfo, CodeComplexity};
+use crate::ai::{FunctionInfo, VariableInfo, CodeComplexity};
 
 /// Language-specific parsing and analysis tools
 pub struct LanguageTools {
@@ -217,7 +217,7 @@ impl LanguageTools {
     /// Extract function signature
     fn extract_function_signature(&self, node: &Node) -> String {
         // Simplified signature extraction
-        node.utf8_text(node.utf8_text(node.utf8_text(b"").unwrap()).unwrap()).unwrap().to_string()
+        node.utf8_text(&[]).unwrap_or("").to_string()
     }
     
     /// Get language-specific keywords

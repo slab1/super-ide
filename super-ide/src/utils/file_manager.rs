@@ -5,7 +5,7 @@ use std::fs;
 use anyhow::Result;
 use thiserror::Error;
 use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use futures::StreamExt;
 
 /// File management errors
@@ -42,7 +42,7 @@ pub struct FileWatcher {
 impl FileWatcher {
     pub fn new<P: AsRef<Path>>(
         path: P,
-        event_sender: mpsc::UnboundedSender<FileEvent>,
+        mut event_sender: mpsc::UnboundedSender<FileEvent>,
     ) -> Result<Self, FileManagerError> {
         let mut watcher = RecommendedWatcher::new(
             move |res: Result<Event, _>| {
@@ -62,6 +62,10 @@ impl FileWatcher {
                             for path in event.paths {
                                 let _ = event_sender.send(FileEvent::Deleted(path));
                             }
+                        }
+                        EventKind::Any | EventKind::Access(_) => {
+                            // Handle these patterns that were missing
+                            // These are informational events, no action needed for now
                         }
                         EventKind::Other => {}
                     }

@@ -58,6 +58,8 @@ regex = "1.10"
 glob = "0.3"
 lazy_static = "1.4"
 log = "0.4"
+terminal_size = "0.3"
+atty = "0.2"
 
 # Development tools
 temp-env = "0.2"

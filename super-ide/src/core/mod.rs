@@ -9,6 +9,7 @@ use crate::ai::{AiEngine, AiConfig};
 use crate::editor::Editor;
 use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
+use crate::terminal::{TerminalManager, TerminalConfig};
 
 /// Main IDE result type
 pub type IdeResult<T> = Result<T, IdeError>;
@@ -36,9 +37,7 @@ pub enum IdeError {
 }
 
 /// Main SuperIDE application state
-#[derive(Clone)]
-#[derive(Debug)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SuperIDE {
     /// Core configuration
     config: Arc<RwLock<Configuration>>,
@@ -51,6 +50,9 @@ pub struct SuperIDE {
     
     /// Event bus for inter-component communication
     event_bus: Arc<EventBus>,
+    
+    /// Terminal manager for command execution
+    terminal_manager: Arc<TerminalManager>,
     
     /// Application state
     state: Arc<RwLock<IdeState>>,
@@ -162,6 +164,19 @@ impl SuperIDE {
         let editor = Editor::new(&config).await.map_err(IdeError::Editor)?;
         let event_bus = EventBus::new();
         
+        // Initialize terminal manager with default config
+        let terminal_config = TerminalConfig {
+            shell: if cfg!(target_os = "windows") {
+                "cmd.exe".to_string()
+            } else {
+                "/bin/bash".to_string()
+            },
+            working_directory: None,
+            environment: std::env::vars().collect(),
+            pty_size: Some((80, 24)),
+        };
+        let terminal_manager = Arc::new(TerminalManager::new(terminal_config));
+        
         let state = IdeState {
             projects: Vec::new(),
             active_tabs: Vec::new(),
@@ -174,6 +189,7 @@ impl SuperIDE {
             ai_engine: Arc::new(ai_engine),
             editor: Arc::new(Mutex::new(editor)),
             event_bus: Arc::new(event_bus),
+            terminal_manager,
             state: Arc::new(RwLock::new(state)),
         })
     }
@@ -196,6 +212,11 @@ impl SuperIDE {
     /// Get event bus reference
     pub fn event_bus(&self) -> &Arc<EventBus> {
         &self.event_bus
+    }
+    
+    /// Get terminal manager reference
+    pub fn terminal_manager(&self) -> &Arc<TerminalManager> {
+        &self.terminal_manager
     }
     
     /// Get current IDE state
@@ -279,6 +300,45 @@ impl SuperIDE {
         });
         
         Ok(())
+    }
+    
+    /// Create a new terminal session
+    pub async fn create_terminal(&self, title: Option<String>) -> IdeResult<String> {
+        self.terminal_manager.create_session(title).await.map_err(|e| e.into())
+    }
+    
+    /// Start a terminal session
+    pub async fn start_terminal(&self, session_id: &str) -> IdeResult<()> {
+        self.terminal_manager.start_terminal(session_id).await.map_err(|e| e.into())
+    }
+    
+    /// Stop a terminal session
+    pub async fn stop_terminal(&self, session_id: &str) -> IdeResult<()> {
+        self.terminal_manager.stop_terminal(session_id).await.map_err(|e| e.into())
+    }
+    
+    /// Send input to a terminal session
+    pub async fn send_terminal_input(&self, session_id: &str, input: &str) -> IdeResult<()> {
+        self.terminal_manager.send_input(session_id, input).await.map_err(|e| e.into())
+    }
+    
+    /// List all terminal sessions
+    pub async fn list_terminals(&self) -> Vec<super::terminal::TerminalSession> {
+        self.terminal_manager.list_sessions().await
+    }
+    
+    /// Execute a command in a new terminal session
+    pub async fn execute_command(&self, command: &str, title: Option<String>) -> IdeResult<super::terminal::ProcessResult> {
+        let session_id = self.create_terminal(title).await?;
+        self.start_terminal(&session_id).await?;
+        
+        let executor = super::terminal::CommandExecutor::default();
+        let result = executor.execute(command).await?;
+        
+        // Clean up the session
+        let _ = self.stop_terminal(&session_id).await;
+        
+        Ok(result)
     }
 }
 
