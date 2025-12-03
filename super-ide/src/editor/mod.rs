@@ -623,10 +623,10 @@ impl Editor {
     /// Parse syntax tree for a document
     async fn parse_syntax_tree(&self, document: &Arc<RwLock<Document>>) {
         // Extract content and document info without holding multiple borrows
-        let (_content, _language) = {
-            let _doc_read = document.read().await;
+        let (content, _language) = {
+            let doc_read = document.read().await;
             let content_clone = {
-                let content = _doc_read.content.read().await;
+                let content = doc_read.content.read().await;
                 content.clone()
             };
             (content_clone, doc_read.language.clone())

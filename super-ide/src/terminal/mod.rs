@@ -8,7 +8,6 @@
 //! - Integrate with the WebSocket UI for terminal display
 
 use std::collections::HashMap;
-use std::io;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -314,7 +313,7 @@ impl TerminalManager {
         if let (Some(_stdout_tx), Some(_stderr_tx)) = (stdout_sender, stderr_sender) {
             // In a real implementation, you'd create a combined receiver
             // For now, return the stdout receiver
-            let (_tx, _rx) = mpsc::unbounded_channel::<TerminalOutput>();
+            let (_tx, rx) = mpsc::unbounded_channel::<TerminalOutput>();
             
             // This is a simplified implementation
             // In reality, you'd merge stdout and stderr streams

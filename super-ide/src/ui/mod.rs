@@ -366,12 +366,12 @@ async fn websocket_connection(
     let event_task = tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
             let message = match event {
-                UiEvent::CodeChanged { document_id: _, content: _, position: _ } => {
+                UiEvent::CodeChanged { document_id, content: _, position } => {
                     WsMessage::CodeAnalysis {
                         analysis: format!("Code changed in document {} at position {:?}", document_id, position)
                     }
                 },
-                UiEvent::FileOpened { document_id: _, file_path: _ } => {
+                UiEvent::FileOpened { document_id: _, file_path } => {
                     WsMessage::CodeAnalysis {
                         analysis: format!("Opened file: {}", file_path)
                     }
