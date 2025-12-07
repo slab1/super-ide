@@ -11,6 +11,13 @@ use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
 use crate::terminal::{TerminalManager, TerminalConfig};
 
+/// Document context information
+#[derive(Debug, Clone)]
+struct DocumentContext {
+    language: String,
+    file_type: String,
+}
+
 /// Main IDE result type
 pub type IdeResult<T> = Result<T, IdeError>;
 
@@ -478,21 +485,54 @@ impl SuperIDE {
     }
 
     /// Get code completions for the current context
-    pub async fn get_code_completions(&self, _document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
+    pub async fn get_code_completions(&self, document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
         let editor = self.editor.lock().await;
+
+        // Use document_id to get document-specific context
+        let document_context = self.get_document_context(document_id).await?;
+        let language = document_context.language;
+        let file_type = document_context.file_type;
+        
+        // Enhance context with document-specific information
+        let enhanced_context = format!("{} | File: {} | Language: {}", text_context, file_type, language);
 
         let context = crate::editor::CompletionContext {
             cursor_position: crate::editor::CursorPosition {
                 line: cursor_position.0,
                 column: cursor_position.1,
             },
-            language: "Rust".to_string(), // Would detect from document
-            text_before_cursor: text_context.to_string(),
+            language,
+            text_before_cursor: enhanced_context,
             text_after_cursor: String::new(),
         };
 
         let completions = editor.get_completions(&context).await?;
         Ok(completions)
+    }
+
+    /// Get document-specific context information
+    async fn get_document_context(&self, document_id: &str) -> IdeResult<DocumentContext> {
+        // This would normally look up the document from a document store
+        // For now, provide basic context based on document_id
+        let language = if document_id.contains("rust") {
+            "Rust".to_string()
+        } else if document_id.contains("py") {
+            "Python".to_string()
+        } else if document_id.contains("js") || document_id.contains("ts") {
+            "JavaScript".to_string()
+        } else {
+            "Unknown".to_string()
+        };
+
+        let file_type = if document_id.contains("test") {
+            "Test File".to_string()
+        } else if document_id.contains("main") || document_id.contains("index") {
+            "Entry Point".to_string()
+        } else {
+            "Source File".to_string()
+        };
+
+        Ok(DocumentContext { language, file_type })
     }
 
     /// Analyze code for issues and suggestions

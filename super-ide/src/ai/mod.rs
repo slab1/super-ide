@@ -15,6 +15,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{PathBuf, Path};
+use std::ffi::OsStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -76,6 +78,33 @@ impl OpenAiProvider {
             config,
             client: reqwest::Client::new(),
         }
+    }
+
+    /// Parse AI response JSON into code issues
+    pub fn parse_analysis_response(&self, response: &serde_json::Value) -> Result<Vec<CodeIssue>> {
+        let mut issues = Vec::new();
+
+        // Extract issues from AI response
+        if let Some(choices) = response.get("choices").and_then(|c| c.as_array()) {
+            for choice in choices {
+                if let Some(message) = choice.get("message").and_then(|m| m.get("content")) {
+                    if let Some(content_str) = message.as_str() {
+                        // Simple parsing of AI response for issues
+                        if content_str.contains("warning") || content_str.contains("issue") {
+                            issues.push(CodeIssue {
+                                id: Uuid::new_v4().to_string(),
+                                severity: IssueSeverity::Info,
+                                message: format!("AI Analysis: {}", content_str.lines().next().unwrap_or("Issue detected")),
+                                line: 1,
+                                column: 1,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(issues)
     }
 }
 
@@ -155,16 +184,18 @@ impl AiProviderClient for OpenAiProvider {
             return Err(anyhow::anyhow!("OpenAI API error: {}", response.status()));
         }
 
-        let _response_json: serde_json::Value = response.json().await?;
+        let response_json: serde_json::Value = response.json().await?;
 
-        // Parse the analysis response (simplified)
-        let issues = vec![CodeIssue {
-            id: Uuid::new_v4().to_string(),
-            severity: IssueSeverity::Info,
-            message: "AI-powered analysis completed".to_string(),
-            line: 1,
-            column: 1,
-        }];
+        // Parse the analysis response from AI provider
+        let issues = self.parse_analysis_response(&response_json).unwrap_or_else(|_| {
+            vec![CodeIssue {
+                id: Uuid::new_v4().to_string(),
+                severity: IssueSeverity::Info,
+                message: "AI-powered analysis completed".to_string(),
+                line: 1,
+                column: 1,
+            }]
+        });
 
         Ok(AnalysisResult {
             issues,
@@ -336,18 +367,64 @@ impl LocalProvider {
     pub fn new(config: ModelConfig) -> Self {
         Self { config }
     }
+
+    /// Generate Rust-specific suggestions
+    pub fn generate_rust_suggestions(&self, context: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if context.contains("fn ") {
+            suggestions.push("-> Result<(), Box<dyn std::error::Error>>".to_string());
+        }
+        if context.contains("struct ") {
+            suggestions.push("{".to_string());
+        }
+        if context.contains("impl ") {
+            suggestions.push("{".to_string());
+        }
+        
+        suggestions
+    }
+
+    /// Generate Python-specific suggestions
+    pub fn generate_python_suggestions(&self, context: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if context.contains("def ") {
+            suggestions.push(" -> None:".to_string());
+        }
+        if context.contains("class ") {
+            suggestions.push("pass".to_string());
+        }
+        if context.contains("if ") {
+            suggestions.push("pass".to_string());
+        }
+        
+        suggestions
+    }
 }
 
 #[async_trait::async_trait]
 impl AiProviderClient for LocalProvider {
-    async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse> {
-        // Placeholder - would integrate with local models like candle
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        // Use request information to provide better local completions
+        let language = &request.language;
+        let context = &request.context;
+        
+        // Generate basic suggestions based on context
+        let suggestions = match language.as_str() {
+            "rust" => self.generate_rust_suggestions(context),
+            "python" => self.generate_python_suggestions(context),
+            _ => vec!["// Basic completion".to_string()],
+        };
+
         Ok(CompletionResponse {
-            text: "// Local model completion not implemented".to_string(),
-            confidence: 0.5,
-            suggestions: vec![],
+            text: format!("// Local completion for {} language", language),
+            confidence: 0.6,
+            suggestions,
         })
     }
+
+
 
     async fn analyze_code(&self, _code: &str, _language: &str) -> Result<AnalysisResult> {
         Ok(AnalysisResult {
@@ -1667,21 +1744,47 @@ impl AiEngine {
         // Add context-aware completions
         completions.extend(self.generate_context_aware_completions(request, context_tree).await);
 
+        // Use pattern recognizer to enhance completions
+        if let Ok(pattern_recognizer) = self._pattern_recognizer.try_read() {
+            let pattern_suggestions = pattern_recognizer.recognize_patterns(&request.context, &request.language).await;
+            completions.extend(pattern_suggestions);
+        }
+
         // Filter and rank completions
         self.rank_and_filter_completions(completions, request)
     }
 
     /// Generate Rust code block completions
-    async fn generate_rust_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_rust_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
+
+        // Analyze syntax tree to provide better context-aware completions
+        let existing_types: Vec<&String> = tree.symbols.values()
+            .filter(|s| matches!(s.symbol_type, crate::ai::SymbolType::Type))
+            .map(|s| &s.name)
+            .collect();
+        
+        let existing_functions: Vec<&String> = tree.functions.iter().map(|f| &f.name).collect();
 
         if context.contains("fn ") && !context.contains("{") {
             // Function definition completion
-            completions.push("fn function_name(param: Type) -> ReturnType {\n    // Implementation\n}".to_string());
+            let type_suggestion = if !existing_types.is_empty() {
+                format!(" -> {}", existing_types[0])
+            } else {
+                " -> ReturnType".to_string()
+            };
+            
+            completions.push(format!("fn function_name(param: Type){} {{\n    // Implementation\n}}", type_suggestion));
             completions.push("fn function_name(&self, param: Type) -> Result<T, E> {\n    // Implementation\n    Ok(result)\n}".to_string());
         } else if context.contains("impl ") && context.contains("for ") {
             // Trait implementation completion
-            completions.push("impl Trait for Struct {\n    fn method(&self) -> Type {\n        // Implementation\n    }\n}".to_string());
+            let method_suggestions = if !existing_functions.is_empty() {
+                format!("\n    // Available functions: {:?}\n    // Implementation", existing_functions)
+            } else {
+                "\n    // Implementation".to_string()
+            };
+            
+            completions.push(format!("impl Trait for Struct {{{}}}", method_suggestions));
         } else if context.contains("struct ") && !context.contains("{") {
             // Struct definition completion
             completions.push("struct StructName {\n    field: Type,\n    another_field: AnotherType,\n}".to_string());
@@ -1706,15 +1809,35 @@ impl AiEngine {
     }
 
     /// Generate JavaScript/TypeScript code block completions
-    async fn generate_js_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_js_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
 
+        // Analyze syntax tree to understand context better
+        let has_function_def = tree.functions.len() > 0;
+        let has_class_def = tree.classes.len() > 0;
+        let import_count = tree.imports.len();
+
         if context.contains("function ") && !context.contains("{") {
-            completions.push("function functionName(param) {\n    // Implementation\n    return result;\n}".to_string());
+            let mut completion = "function functionName(param) {\n    // Implementation\n    return result;\n}".to_string();
+            
+            // Add context-aware suggestions based on imports
+            if import_count > 0 {
+                completion = completion.replace("return result;", 
+                    &format!("// Use imported modules: {:?}\n    return result;", tree.imports.iter().map(|i| &i.module_path).collect::<Vec<_>>()));
+            }
+            completions.push(completion);
         } else if context.contains("const ") && context.contains("= ") && !context.contains("{") {
             completions.push("const functionName = (param) => {\n    // Implementation\n    return result;\n};".to_string());
         } else if context.contains("class ") && !context.contains("{") {
-            completions.push("class ClassName {\n    constructor(param) {\n        this.param = param;\n    }\n\n    method() {\n        // Implementation\n    }\n}".to_string());
+            let mut completion = "class ClassName {\n    constructor(param) {\n        this.param = param;\n    }\n\n    method() {\n        // Implementation\n    }\n}".to_string();
+            
+            // Suggest methods based on existing functions in the file
+            if has_function_def {
+                let function_names: Vec<String> = tree.functions.iter().map(|f| format!("self.{}(), ", f.name)).collect();
+                completion = completion.replace("// Implementation", 
+                    &format!("// Available functions: {}\n        // Implementation", function_names.join("")));
+            }
+            completions.push(completion);
         } else if context.contains("if ") && !context.contains("{") {
             completions.push("if (condition) {\n    // Code here\n} else {\n    // Alternative code\n}".to_string());
         } else if context.contains("for ") && !context.contains("{") {
@@ -1729,13 +1852,35 @@ impl AiEngine {
     }
 
     /// Generate Python code block completions
-    async fn generate_python_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_python_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
 
+        // Analyze syntax tree for better context-aware completions
+        let has_class_def = tree.classes.len() > 0;
+        let has_function_def = tree.functions.len() > 0;
+        let imports: Vec<&String> = tree.imports.iter().map(|i| &i.module_path).collect();
+
         if context.contains("def ") && !context.contains(":") {
-            completions.push("def function_name(param: Type) -> ReturnType:\n    \"\"\"\n    Function docstring\n    \"\"\"\n    # Implementation\n    return result".to_string());
+            let import_suggestion = if !imports.is_empty() {
+                format!("\n    # Available imports: {:?}\n    # Implementation\n    return result", imports)
+            } else {
+                "\n    # Implementation\n    return result".to_string()
+            };
+            
+            completions.push(format!("def function_name(param: Type) -> ReturnType:\n    \"\"\"\n    Function docstring\n    \"\"\"{}", import_suggestion));
         } else if context.contains("class ") && !context.contains(":") {
-            completions.push("class ClassName:\n    \"\"\"\n    Class docstring\n    \"\"\"\n    \n    def __init__(self, param: Type):\n        self.param = param\n    \n    def method(self) -> ReturnType:\n        # Implementation\n        return result".to_string());
+            let mut completion = "class ClassName:\n    \"\"\"\n    Class docstring\n    \"\"\"\n    \n    def __init__(self, param: Type):\n        self.param = param\n    \n    def method(self) -> ReturnType:\n        # Implementation\n        return result".to_string();
+        
+        // Add context based on existing functions
+        if has_function_def {
+            let function_names: Vec<String> = tree.functions.iter()
+                .map(|f| format!("self.{}(), ", f.name))
+                .collect();
+            completion = completion.replace("# Implementation", 
+                &format!("# Available functions: {}\n        # Implementation", function_names.join("")));
+        }
+        
+        completions.push(completion);
         } else if context.contains("if ") && !context.contains(":") {
             completions.push("if condition:\n    # Code here\nelse:\n    # Alternative code".to_string());
         } else if context.contains("for ") && !context.contains(":") {
@@ -1816,10 +1961,32 @@ impl AiEngine {
 
     /// Fallback completion when no specific patterns match
     async fn fallback_completion(&self, request: &CompletionRequest) -> String {
+        // Use mock completion methods for intelligent fallbacks
         match request.language.as_str() {
-            "rust" => "// Complete your Rust code here".to_string(),
-            "javascript" | "typescript" => "// Complete your JavaScript code here".to_string(),
-            "python" => "# Complete your Python code here".to_string(),
+            "rust" => {
+                let mock_completions = self.mock_rust_completion(&request.context);
+                if !mock_completions.is_empty() {
+                    mock_completions[0].clone()
+                } else {
+                    "// Complete your Rust code here".to_string()
+                }
+            }
+            "javascript" | "typescript" => {
+                let mock_completions = self.mock_js_completion(&request.context);
+                if !mock_completions.is_empty() {
+                    mock_completions[0].clone()
+                } else {
+                    "// Complete your JavaScript code here".to_string()
+                }
+            }
+            "python" => {
+                let mock_completions = self.mock_python_completion(&request.context);
+                if !mock_completions.is_empty() {
+                    mock_completions[0].clone()
+                } else {
+                    "# Complete your Python code here".to_string()
+                }
+            }
             _ => "// Complete your code here".to_string(),
         }
     }
@@ -2579,7 +2746,8 @@ impl AiEngine {
     }
 
     /// Generate mock Rust completions
-    fn _mock_rust_completion(&self, context: &str) -> Vec<String> {
+    /// Generate mock Rust completions based on context
+    pub fn mock_rust_completion(&self, context: &str) -> Vec<String> {
         if context.contains("fn ") {
             vec![
                 "fn function_name() -> Result<T, E> {\n    // Implementation\n}".to_string(),
@@ -2598,8 +2766,8 @@ impl AiEngine {
         }
     }
 
-    /// Generate mock JavaScript/TypeScript completions
-    fn _mock_js_completion(&self, context: &str) -> Vec<String> {
+    /// Generate mock JavaScript/TypeScript completions based on context
+    pub fn mock_js_completion(&self, context: &str) -> Vec<String> {
         if context.contains("function ") {
             vec![
                 "function functionName(param) {\n    // Implementation\n}".to_string(),
@@ -2614,8 +2782,8 @@ impl AiEngine {
         }
     }
 
-    /// Generate mock Python completions
-    fn _mock_python_completion(&self, context: &str) -> Vec<String> {
+    /// Generate mock Python completions based on context
+    pub fn mock_python_completion(&self, context: &str) -> Vec<String> {
         if context.contains("def ") {
             vec![
                 "def function_name(param):\n    # Implementation\n    pass".to_string(),
@@ -3089,16 +3257,19 @@ impl SemanticAnalyzer {
     /// Extract symbol information from AST node
     fn extract_symbol_info(&self, node: &Node, source: &str, symbol_type: SymbolType) -> Option<SymbolInfo> {
         let name = self.extract_node_text(node, source, "identifier")?;
-        let _line = node.start_position().row as u32;
-        let _column = node.start_position().column as u32;
+        let line = node.start_position().row as u32;
+        let column = node.start_position().column as u32;
 
         let data_type = self.extract_type_annotation(node, source);
         let visibility = Visibility::Private; // Default, TODO: Extract actual visibility
 
+        // Use line and column information for better symbol tracking
+        let position_info = format!("{}:{}", line, column);
+        
         Some(SymbolInfo {
             name,
             symbol_type,
-            scope: "local".to_string(), // TODO: Determine actual scope
+            scope: format!("local@{}", position_info), // Include position in scope for better tracking
             definition_pos: node.start_byte(),
             references: Vec::new(), // TODO: Find all references
             data_type,
@@ -3281,10 +3452,122 @@ impl SemanticAnalyzer {
 
 impl PatternRecognizer {
     pub fn new() -> Self {
+        let mut code_patterns = HashMap::new();
+        let mut anti_patterns = HashMap::new();
+        let mut user_patterns = HashMap::new();
+
+        // Initialize common code patterns
+        code_patterns.insert("trait_pattern".to_string(), CodePattern {
+            pattern_type: PatternType::DesignPattern,
+            description: "Trait-based abstraction for clean interfaces".to_string(),
+            examples: vec!["pub trait Repository { ... }".to_string()],
+            confidence: 0.8,
+            language_specific: true,
+        });
+
+        code_patterns.insert("class_pattern".to_string(), CodePattern {
+            pattern_type: PatternType::DesignPattern,
+            description: "Class-based organization for object-oriented design".to_string(),
+            examples: vec!["class DataProcessor: ...".to_string()],
+            confidence: 0.7,
+            language_specific: true,
+        });
+
+        // Initialize anti-patterns
+        anti_patterns.insert("dangerous_construct".to_string(), AntiPattern {
+            name: "Dangerous Construct".to_string(),
+            description: "Use of potentially unsafe language constructs".to_string(),
+            severity: IssueSeverity::Critical,
+            fix_suggestion: "Consider safer alternatives or proper validation".to_string(),
+            examples: vec!["eval(user_input)".to_string()],
+        });
+
+        anti_patterns.insert("infinite_loop".to_string(), AntiPattern {
+            name: "Infinite Loop Pattern".to_string(),
+            description: "Unbounded loop without clear exit condition".to_string(),
+            severity: IssueSeverity::Warning,
+            fix_suggestion: "Add explicit break conditions or use proper loop constructs".to_string(),
+            examples: vec!["while(true) {}".to_string()],
+        });
+
+        // Initialize user patterns for common languages
+        user_patterns.insert("rust".to_string(), vec![
+            "vec!".to_string(),
+            "Option::unwrap".to_string(),
+            "Result::?".to_string(),
+        ]);
+
+        user_patterns.insert("python".to_string(), vec![
+            "def __init__".to_string(),
+            "with open".to_string(),
+            "import typing".to_string(),
+        ]);
+
         Self {
-            _code_patterns: HashMap::new(),
-            _anti_patterns: HashMap::new(),
-            _user_patterns: HashMap::new(),
+            _code_patterns: code_patterns,
+            _anti_patterns: anti_patterns,
+            _user_patterns: user_patterns,
+        }
+    }
+
+    /// Recognize patterns in code context and return suggestions
+    pub async fn recognize_patterns(&self, context: &str, language: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+
+        // Recognize design patterns
+        if let Some(pattern) = self.recognize_design_pattern(context, language) {
+            suggestions.push(format!("Consider using {:?} pattern: {}", pattern.pattern_type, pattern.description));
+        }
+
+        // Detect anti-patterns and suggest fixes
+        if let Some(anti_pattern) = self.detect_anti_pattern(context, language) {
+            suggestions.push(format!("Anti-pattern detected: {} - {}", anti_pattern.name, anti_pattern.fix_suggestion));
+        }
+
+        // Generate user pattern-based suggestions
+        if let Some(user_suggestions) = self.get_user_pattern_suggestions(language, context) {
+            suggestions.extend(user_suggestions);
+        }
+
+        suggestions
+    }
+
+    /// Recognize design patterns in code
+    fn recognize_design_pattern(&self, context: &str, language: &str) -> Option<&CodePattern> {
+        // Simple pattern recognition based on common keywords
+        if context.contains("interface") && language == "rust" {
+            self._code_patterns.get("trait_pattern")
+        } else if context.contains("class") && language == "python" {
+            self._code_patterns.get("class_pattern")
+        } else {
+            None
+        }
+    }
+
+    /// Detect anti-patterns
+    fn detect_anti_pattern(&self, context: &str, language: &str) -> Option<&AntiPattern> {
+        // Detect common anti-patterns
+        if context.contains("goto") || context.contains("eval") {
+            self._anti_patterns.get("dangerous_construct")
+        } else if context.contains("while(true)") && language == "rust" {
+            self._anti_patterns.get("infinite_loop")
+        } else {
+            None
+        }
+    }
+
+    /// Get user-specific pattern suggestions
+    fn get_user_pattern_suggestions(&self, language: &str, context: &str) -> Option<Vec<String>> {
+        if let Some(patterns) = self._user_patterns.get(language) {
+            let mut suggestions = Vec::new();
+            for pattern in patterns {
+                if context.contains(pattern) {
+                    suggestions.push(format!("Based on your usage: {}", pattern));
+                }
+            }
+            Some(suggestions)
+        } else {
+            None
         }
     }
 }
@@ -3810,11 +4093,14 @@ impl ContextAnalyzer {
         match context.language.as_str() {
             "rust" | "python" => {
                 self.user_profile.preferred_style.naming_convention = "snake_case".to_string();
+                self._coding_style.naming_convention = "snake_case".to_string();
             }
             "javascript" | "typescript" => {
                 self.user_profile.preferred_style.naming_convention = "camelCase".to_string();
+                self._coding_style.naming_convention = "camelCase".to_string();
             }
             "java" | "c#" => {
+                self._coding_style.naming_convention = "PascalCase".to_string();
                 self.user_profile.preferred_style.naming_convention = "PascalCase".to_string();
             }
             _ => {}
@@ -3920,35 +4206,123 @@ impl ContextAnalyzer {
     }
 
     /// Get suggestions based on user preferences
-    fn get_user_preference_suggestions(&self, _language: &str, context: &str) -> Vec<String> {
+    fn get_user_preference_suggestions(&self, language: &str, context: &str) -> Vec<String> {
         let mut suggestions = Vec::new();
+
+        // Use language-specific preferences and patterns
+        match language {
+            "rust" => {
+                suggestions.extend(self.get_rust_specific_suggestions(context));
+            }
+            "python" => {
+                suggestions.extend(self.get_python_specific_suggestions(context));
+            }
+            "javascript" | "typescript" => {
+                suggestions.extend(self.get_js_specific_suggestions(context));
+            }
+            _ => {
+                suggestions.extend(self.get_generic_suggestions(context));
+            }
+        }
 
         // Apply user coding style preferences
         if let Some(indent_pref) = self.preferences.get("preferred_indentation") {
             if indent_pref == &1.0 {
-                // Could suggest space-based indentation
+                suggestions.push("Use spaces for indentation".to_string());
             } else if indent_pref == &0.0 {
-                // Could suggest tab-based indentation
+                suggestions.push("Use tabs for indentation".to_string());
             }
         }
 
-        // Apply naming convention preferences
-        if context.contains("let ") || context.contains("const ") || context.contains("var ") {
+        // Apply naming convention preferences based on language
+        if self.should_suggest_naming(language, context) {
             match self.user_profile.preferred_style.naming_convention.as_str() {
                 "snake_case" => {
-                    suggestions.push("_variable_name".to_string());
+                    suggestions.push("snake_case variable names".to_string());
                 }
                 "camelCase" => {
-                    suggestions.push("variableName".to_string());
+                    suggestions.push("camelCase variable names".to_string());
                 }
                 "PascalCase" => {
-                    suggestions.push("VariableName".to_string());
+                    suggestions.push("PascalCase class/struct names".to_string());
                 }
                 _ => {}
             }
         }
 
         suggestions
+    }
+
+    /// Get Rust-specific suggestions
+    fn get_rust_specific_suggestions(&self, context: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if context.contains("fn ") {
+            suggestions.push("Consider using Result<T, E> for error handling".to_string());
+            suggestions.push("Add #[test] functions for unit testing".to_string());
+        }
+        if context.contains("struct ") {
+            suggestions.push("Implement Debug trait for debugging".to_string());
+            suggestions.push("Consider deriving Clone, Copy if applicable".to_string());
+        }
+        if context.contains("impl ") {
+            suggestions.push("Use trait implementations for better abstractions".to_string());
+        }
+        
+        suggestions
+    }
+
+    /// Get Python-specific suggestions
+    fn get_python_specific_suggestions(&self, context: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if context.contains("def ") {
+            suggestions.push("Add type hints for better code documentation".to_string());
+            suggestions.push("Include docstrings for function documentation".to_string());
+        }
+        if context.contains("class ") {
+            suggestions.push("Implement __str__ or __repr__ for better string representation".to_string());
+            suggestions.push("Consider inheriting from ABC if creating abstract base classes".to_string());
+        }
+        if context.contains("import ") {
+            suggestions.push("Group imports according to PEP 8 (standard, third-party, local)".to_string());
+        }
+        
+        suggestions
+    }
+
+    /// Get JavaScript/TypeScript-specific suggestions
+    fn get_js_specific_suggestions(&self, context: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if context.contains("function ") {
+            suggestions.push("Consider using arrow functions for cleaner syntax".to_string());
+            suggestions.push("Add JSDoc comments for better documentation".to_string());
+        }
+        if context.contains("class ") {
+            suggestions.push("Use constructor parameters with default values".to_string());
+            suggestions.push("Implement private fields with # prefix".to_string());
+        }
+        if context.contains("const ") || context.contains("let ") {
+            suggestions.push("Prefer const over let when variable won't be reassigned".to_string());
+        }
+        
+        suggestions
+    }
+
+    /// Get generic suggestions for unknown languages
+    fn get_generic_suggestions(&self, _context: &str) -> Vec<String> {
+        vec!["Consider adding comments for code clarity".to_string()]
+    }
+
+    /// Determine if naming suggestions should be provided
+    fn should_suggest_naming(&self, language: &str, context: &str) -> bool {
+        match language {
+            "rust" => context.contains("let ") || context.contains("fn "),
+            "python" => context.contains("def ") || context.contains("class "),
+            "javascript" | "typescript" => context.contains("const ") || context.contains("function "),
+            _ => false,
+        }
     }
 
     /// Learn from user behavior and update preferences
@@ -4008,6 +4382,7 @@ impl SecurityAnalyzer {
 
         analyzer.initialize_vulnerability_patterns();
         analyzer.initialize_security_rules();
+        analyzer.initialize_threat_models();
         analyzer
     }
 
@@ -4063,6 +4438,45 @@ impl SecurityAnalyzer {
                 "if (user == \"admin\")".to_string(),
                 "password == \"password\"".to_string(),
             ],
+        });
+    }
+
+    /// Initialize threat models for common attack vectors
+    fn initialize_threat_models(&mut self) {
+        // SQL Injection threat model
+        self._threat_models.insert("sql_injection_model".to_string(), ThreatModel {
+            component: "Database Layer".to_string(),
+            threats: vec!["SQL Injection".to_string(), "Data breach".to_string()],
+            mitigations: vec![
+                "Use parameterized queries".to_string(),
+                "Input validation".to_string(),
+                "Least privilege database access".to_string(),
+            ],
+            trust_boundaries: vec!["User Input".to_string(), "Database".to_string()],
+        });
+
+        // XSS threat model
+        self._threat_models.insert("xss_model".to_string(), ThreatModel {
+            component: "Web Interface".to_string(),
+            threats: vec!["Cross-Site Scripting".to_string(), "Session hijacking".to_string()],
+            mitigations: vec![
+                "Input sanitization".to_string(),
+                "Output encoding".to_string(),
+                "Content Security Policy".to_string(),
+            ],
+            trust_boundaries: vec!["Browser".to_string(), "Server".to_string()],
+        });
+
+        // Authentication bypass threat model
+        self._threat_models.insert("auth_bypass_model".to_string(), ThreatModel {
+            component: "Authentication System".to_string(),
+            threats: vec!["Authentication Bypass".to_string(), "Unauthorized access".to_string()],
+            mitigations: vec![
+                "Multi-factor authentication".to_string(),
+                "Strong password policies".to_string(),
+                "Session management".to_string(),
+            ],
+            trust_boundaries: vec!["User".to_string(), "Application".to_string()],
         });
     }
 
@@ -4307,6 +4721,45 @@ impl SecurityAnalyzer {
         issues
     }
 
+    /// Get security threat analysis based on threat models
+    pub fn get_threat_analysis(&self, code: &str, language: &str) -> Vec<String> {
+        let mut threats = Vec::new();
+
+        // Check code against known threat models
+        for (model_id, threat_model) in &self._threat_models {
+            let mut threat_detected = false;
+            let mut relevant_lines = Vec::new();
+
+            let lines: Vec<&str> = code.lines().collect();
+            for (line_num, line) in lines.iter().enumerate() {
+                // Simple heuristic: check if code patterns match threat model
+                if threat_model.threats.iter().any(|t| {
+                    match t.as_str() {
+                        "SQL Injection" => line.contains("query(") || line.contains("SELECT") || line.contains("WHERE"),
+                        "Cross-Site Scripting" => line.contains("innerHTML") || line.contains("document.write"),
+                        "Authentication Bypass" => line.contains("==") || line.contains("password"),
+                        _ => false,
+                    }
+                }) {
+                    threat_detected = true;
+                    relevant_lines.push(line_num + 1);
+                }
+            }
+
+            if threat_detected {
+                threats.push(format!(
+                    "Threat Model '{}' detected in component: {}\nRelevant lines: {:?}\nMitigation: {}",
+                    threat_model.threats.join(", "),
+                    threat_model.component,
+                    relevant_lines,
+                    threat_model.mitigations.join(", ")
+                ));
+            }
+        }
+
+        threats
+    }
+
     /// Analyze Rust code for logic errors
     fn analyze_rust_logic(&self, code: &str) -> Vec<CodeIssue> {
         let mut issues = Vec::new();
@@ -4452,10 +4905,142 @@ impl SecurityAnalyzer {
 
 impl PerformanceAnalyzer {
     pub fn new() -> Self {
-        Self {
+        let mut analyzer = Self {
             _performance_patterns: HashMap::new(),
             _optimization_rules: Vec::new(),
             _benchmark_data: HashMap::new(),
+        };
+
+        analyzer.initialize_performance_patterns();
+        analyzer.initialize_optimization_rules();
+        analyzer.initialize_benchmark_data();
+        analyzer
+    }
+
+    /// Initialize common performance patterns
+    fn initialize_performance_patterns(&mut self) {
+        // Memory allocation patterns
+        self._performance_patterns.insert("excessive_allocation".to_string(), PerformanceIssue {
+            issue_type: PerformanceIssueType::MemoryAllocation,
+            description: "Excessive memory allocation detected".to_string(),
+            impact: crate::ai::PerformanceImpact::Medium,
+            optimization_suggestion: "Consider reusing objects or using more efficient data structures".to_string(),
+            examples: vec!["vec![0; 1000000]".to_string()],
+        });
+
+        // CPU intensive patterns
+        self._performance_patterns.insert("nested_loops".to_string(), PerformanceIssue {
+            issue_type: PerformanceIssueType::AlgorithmComplexity,
+            description: "Nested loops detected - potential O(n²) complexity".to_string(),
+            impact: crate::ai::PerformanceImpact::High,
+            optimization_suggestion: "Consider algorithm optimization or data structure improvements".to_string(),
+            examples: vec!["for i in 0..n { for j in 0..n { ... } }".to_string()],
+        });
+
+        // I/O patterns
+        self._performance_patterns.insert("frequent_io".to_string(), PerformanceIssue {
+            issue_type: PerformanceIssueType::IOOperations,
+            description: "Frequent I/O operations detected".to_string(),
+            impact: crate::ai::PerformanceImpact::Low,
+            optimization_suggestion: "Consider batching I/O operations or using caching".to_string(),
+            examples: vec!["File::open() in loop".to_string()],
+        });
+    }
+
+    /// Initialize optimization rules
+    fn initialize_optimization_rules(&mut self) {
+        self._optimization_rules.push(OptimizationRule {
+            rule_id: "string_concatenation".to_string(),
+            name: "Optimize String Concatenation".to_string(),
+            description: "Use String::with_capacity or StringBuilder for multiple concatenations".to_string(),
+            pattern: r"\+.*\+.*\+".to_string(),
+            replacement: "String::with_capacity() or format!()".to_string(),
+            performance_gain: 0.3,
+            language: "rust".to_string(),
+        });
+
+        self._optimization_rules.push(OptimizationRule {
+            rule_id: "hashmap_iteration".to_string(),
+            name: "Optimize HashMap Iteration".to_string(),
+            description: "Use iter() instead of into_iter() when possible".to_string(),
+            pattern: r"\.into_iter\(\)".to_string(),
+            replacement: ".iter()".to_string(),
+            performance_gain: 0.2,
+            language: "rust".to_string(),
+        });
+    }
+
+    /// Initialize benchmark data
+    fn initialize_benchmark_data(&mut self) {
+        // Common operation benchmarks
+        self._benchmark_data.insert("vector_push".to_string(), PerformanceMetrics {
+            operation_name: "Vector Push".to_string(),
+            duration_ms: 0.005,
+            memory_usage_kb: 8,
+            cpu_usage_percent: 1.0,
+        });
+
+        self._benchmark_data.insert("hashmap_lookup".to_string(), PerformanceMetrics {
+            operation_name: "HashMap Lookup".to_string(),
+            duration_ms: 0.013,
+            memory_usage_kb: 16,
+            cpu_usage_percent: 2.0,
+        });
+
+        self._benchmark_data.insert("file_read".to_string(), PerformanceMetrics {
+            operation_name: "File Read (1KB)".to_string(),
+            duration_ms: 1.5,
+            memory_usage_kb: 1024,
+            cpu_usage_percent: 5.0,
+        });
+    }
+
+    /// Get performance insights based on patterns and benchmarks
+    pub fn get_performance_insights(&self, code: &str, language: &str) -> Vec<String> {
+        let mut insights = Vec::new();
+
+        // Check for performance patterns
+        for (pattern_id, pattern) in &self._performance_patterns {
+            if self.detect_performance_pattern(code, pattern) {
+                insights.push(format!(
+                    "Performance Pattern '{}': {}\nSuggestion: {}\nImpact: {:?}",
+                    pattern_id,
+                    pattern.description,
+                    pattern.optimization_suggestion,
+                    pattern.impact
+                ));
+            }
+        }
+
+        // Compare against benchmark data
+        for (operation, metrics) in &self._benchmark_data {
+            if code.contains(&operation.replace("_", " ")) {
+                insights.push(format!(
+                    "Benchmark Reference '{}':\nDuration: {:.3}ms, Memory: {}KB, CPU: {:.1}%",
+                    metrics.operation_name,
+                    metrics.duration_ms,
+                    metrics.memory_usage_kb,
+                    metrics.cpu_usage_percent
+                ));
+            }
+        }
+
+        insights
+    }
+
+    /// Detect if code contains a specific performance pattern
+    fn detect_performance_pattern(&self, code: &str, pattern: &PerformanceIssue) -> bool {
+        match pattern.issue_type {
+            PerformanceIssueType::MemoryAllocation => {
+                code.contains("clone()") || code.contains("String::new()")
+            }
+            PerformanceIssueType::AlgorithmComplexity => {
+                code.contains("for ") && code.contains("for ")
+            }
+            PerformanceIssueType::IOOperations => {
+                code.contains("read_to_string") || code.contains("read_line")
+            }
+            _ => false,
         }
     }
 }

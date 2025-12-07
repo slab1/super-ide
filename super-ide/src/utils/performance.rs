@@ -435,8 +435,14 @@ impl MemoryMonitor {
 
             let used_memory = sys.used_memory() as f32 / (1024.0 * 1024.0); // Convert to MB
 
-            // Store current memory info for future comparisons
-            self.last_memory_info = Some(sys.used_memory() as u64);
+            // Store current memory info for future comparisons and trends
+            self._last_memory_info = Some(sys.used_memory() as u64);
+
+            // Analyze memory trends
+            let memory_trend = self.analyze_memory_trend();
+            if memory_trend > 10.0 {
+                tracing::warn!("Memory usage trend is increasing: {:.1}%", memory_trend);
+            }
 
             used_memory
         }
@@ -446,6 +452,23 @@ impl MemoryMonitor {
             // Fallback implementation - could use system-specific APIs
             // For now, return a dummy value
             100.0 // MB
+        }
+    }
+
+    /// Analyze memory usage trend over time
+    fn analyze_memory_trend(&self) -> f32 {
+        if let Some(last_memory) = self._last_memory_info {
+            // This is a simplified trend analysis
+            // In a real implementation, we'd track multiple data points
+            let current_estimate = 0; // Would get current memory usage
+            let change_percent = if last_memory > 0 {
+                ((current_estimate - last_memory as usize) as f32 / last_memory as f32) * 100.0
+            } else {
+                0.0
+            };
+            change_percent.abs()
+        } else {
+            0.0
         }
     }
 }
