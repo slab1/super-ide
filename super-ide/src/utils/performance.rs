@@ -291,6 +291,12 @@ impl PerformanceMonitor {
     }
 }
 
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Operation monitor for timing specific operations
 pub struct OperationMonitor {
     start_time: Instant,

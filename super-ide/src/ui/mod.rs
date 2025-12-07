@@ -179,30 +179,28 @@ async fn list_files(State(state): State<UiState>) -> impl IntoResponse {
     match std::fs::read_dir(workspace_path) {
         Ok(entries) => {
             let mut files = Vec::new();
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            files.push(FileInfo {
-                                name: entry.file_name().to_string_lossy().to_string(),
-                                path: entry.path().to_string_lossy().to_string(),
-                                size: metadata.len(),
-                                modified: metadata.modified()
-                                    .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
-                                    .unwrap_or_else(|_| chrono::Utc::now()),
-                                is_file: true,
-                            });
-                        } else if metadata.is_dir() {
-                            files.push(FileInfo {
-                                name: entry.file_name().to_string_lossy().to_string(),
-                                path: entry.path().to_string_lossy().to_string(),
-                                size: 0,
-                                modified: metadata.modified()
-                                    .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
-                                    .unwrap_or_else(|_| chrono::Utc::now()),
-                                is_file: false,
-                            });
-                        }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        files.push(FileInfo {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            size: metadata.len(),
+                            modified: metadata.modified()
+                                .map(chrono::DateTime::<chrono::Utc>::from)
+                                .unwrap_or_else(|_| chrono::Utc::now()),
+                            is_file: true,
+                        });
+                    } else if metadata.is_dir() {
+                        files.push(FileInfo {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            size: 0,
+                            modified: metadata.modified()
+                                .map(chrono::DateTime::<chrono::Utc>::from)
+                                .unwrap_or_else(|_| chrono::Utc::now()),
+                            is_file: false,
+                        });
                     }
                 }
             }
@@ -394,14 +392,11 @@ async fn websocket_connection(
                 },
                 UiEvent::CompletionRequest { document_id, context } => {
                     // Get actual completions from the IDE
-                    let completions = match ide_clone.get_code_completions(
+                    let completions = ide_clone.get_code_completions(
                         &document_id,
                         (context.cursor_position.line, context.cursor_position.column),
                         &context.text_before_cursor
-                    ).await {
-                        Ok(comps) => comps,
-                        Err(_) => vec![],
-                    };
+                    ).await.unwrap_or_default();
 
                     WsMessage::Completion {
                         context: CompletionRequest {

@@ -297,6 +297,12 @@ impl EventBus {
     }
 }
 
+impl Default for EventBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Request handler for a specific channel
 pub struct EventRequestHandler {
     name: String,

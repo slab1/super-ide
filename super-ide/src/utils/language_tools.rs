@@ -275,3 +275,9 @@ impl LanguageTools {
         }
     }
 }
+
+impl Default for LanguageTools {
+    fn default() -> Self {
+        Self::new()
+    }
+}

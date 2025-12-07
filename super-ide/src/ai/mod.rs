@@ -2191,29 +2191,26 @@ impl AiEngine {
         let mut issues = Vec::new();
 
         // Pattern recognition for common issues
-        match language {
-            "rust" => {
-                if code.contains("Rc<RefCell<") {
-                    issues.push(CodeIssue {
-                        id: Uuid::new_v4().to_string(),
-                        severity: IssueSeverity::Warning,
-                        message: "Consider using Arc<Mutex<>> for thread-safe interior mutability".to_string(),
-                        line: 1,
-                        column: 1,
-                    });
-                }
-
-                if code.lines().count() > 50 && code.contains("fn main()") {
-                    issues.push(CodeIssue {
-                        id: Uuid::new_v4().to_string(),
-                        severity: IssueSeverity::Info,
-                        message: "Consider breaking large main function into smaller functions".to_string(),
-                        line: 1,
-                        column: 1,
-                    });
-                }
+        if language == "rust" {
+            if code.contains("Rc<RefCell<") {
+                issues.push(CodeIssue {
+                    id: Uuid::new_v4().to_string(),
+                    severity: IssueSeverity::Warning,
+                    message: "Consider using Arc<Mutex<>> for thread-safe interior mutability".to_string(),
+                    line: 1,
+                    column: 1,
+                });
             }
-            _ => {}
+
+            if code.lines().count() > 50 && code.contains("fn main()") {
+                issues.push(CodeIssue {
+                    id: Uuid::new_v4().to_string(),
+                    severity: IssueSeverity::Info,
+                    message: "Consider breaking large main function into smaller functions".to_string(),
+                    line: 1,
+                    column: 1,
+                });
+            }
         }
 
         issues
@@ -2309,27 +2306,24 @@ impl AiEngine {
     async fn generate_refactoring_suggestions(&self, code: &str, language: &str) -> Vec<CodeSuggestion> {
         let mut suggestions = Vec::new();
 
-        match language {
-            "rust" => {
-                if code.lines().count() > 30 && code.contains("fn ") && !code.contains("struct ") {
-                    suggestions.push(CodeSuggestion {
-                        id: Uuid::new_v4().to_string(),
-                        message: "Consider extracting this function into a separate module".to_string(),
-                        code: "mod utils {\n    pub fn extracted_function() {\n        // Implementation\n    }\n}".to_string(),
-                        confidence: 0.6,
-                    });
-                }
-
-                if code.contains("if let Some") && code.contains("else") {
-                    suggestions.push(CodeSuggestion {
-                        id: Uuid::new_v4().to_string(),
-                        message: "Consider using match instead of if let with else".to_string(),
-                        code: "match value {\n    Some(v) => { /* handle some */ }\n    None => { /* handle none */ }\n}".to_string(),
-                        confidence: 0.7,
-                    });
-                }
+        if language == "rust" {
+            if code.lines().count() > 30 && code.contains("fn ") && !code.contains("struct ") {
+                suggestions.push(CodeSuggestion {
+                    id: Uuid::new_v4().to_string(),
+                    message: "Consider extracting this function into a separate module".to_string(),
+                    code: "mod utils {\n    pub fn extracted_function() {\n        // Implementation\n    }\n}".to_string(),
+                    confidence: 0.6,
+                });
             }
-            _ => {}
+
+            if code.contains("if let Some") && code.contains("else") {
+                suggestions.push(CodeSuggestion {
+                    id: Uuid::new_v4().to_string(),
+                    message: "Consider using match instead of if let with else".to_string(),
+                    code: "match value {\n    Some(v) => { /* handle some */ }\n    None => { /* handle none */ }\n}".to_string(),
+                    confidence: 0.7,
+                });
+            }
         }
 
         suggestions
@@ -2973,11 +2967,10 @@ impl AiEngine {
             }
         }
 
-        if language == "python" {
-            if code.contains("for ") && code.contains("range(len(") {
+        if language == "python"
+            && code.contains("for ") && code.contains("range(len(") {
                 advice.push("Use enumerate() instead of range(len()) for better performance and readability".to_string());
             }
-        }
 
         if advice.is_empty() {
             advice.push("Code appears to follow good performance practices".to_string());
@@ -3000,11 +2993,10 @@ impl AiEngine {
             }
         }
 
-        if language == "javascript" {
-            if code.contains("var ") {
+        if language == "javascript"
+            && code.contains("var ") {
                 suggestions.push("Replace var with let/const for better scoping".to_string());
             }
-        }
 
         if suggestions.is_empty() {
             suggestions.push("Code structure looks good, no major refactoring needed".to_string());
@@ -3349,7 +3341,7 @@ impl SemanticAnalyzer {
             match child.kind() {
                 "public" | "visibility_modifier" => {
                     // Check the actual text to determine visibility
-                    if let Some(text) = child.utf8_text(source.as_bytes()).ok() {
+                    if let Ok(text) = child.utf8_text(source.as_bytes()) {
                         match text.trim() {
                             "public" | "pub" => visibility = Visibility::Public,
                             "private" | "priv" => visibility = Visibility::Private,
@@ -3368,7 +3360,7 @@ impl SemanticAnalyzer {
         // Extract default value if present
         let mut default_value = None;
         if let Some(value_child) = node.child_by_field_name("value") {
-            if let Some(value_text) = value_child.utf8_text(source.as_bytes()).ok() {
+            if let Ok(value_text) = value_child.utf8_text(source.as_bytes()) {
                 default_value = Some(value_text.to_string());
             }
         }
@@ -3508,7 +3500,7 @@ impl SemanticAnalyzer {
     pub fn analyze_dependencies(&mut self, syntax_tree: &SyntaxTree) {
         for import in &syntax_tree.imports {
             self.dependency_graph.entry(import.module_path.clone())
-                .or_insert_with(Vec::new);
+                .or_default();
         }
     }
 
@@ -3647,6 +3639,12 @@ impl PatternRecognizer {
     }
 }
 
+impl Default for PatternRecognizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContextAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -3744,12 +3742,10 @@ impl ContextAnalyzer {
         let mut extension_counts = HashMap::new();
 
         // Walk directory and count extensions
-        for entry in walkdir::WalkDir::new(project_root).max_depth(3) {
-            if let Ok(entry) = entry {
-                if let Some(extension) = entry.path().extension() {
-                    let ext_str = extension.to_string_lossy().to_string();
-                    *extension_counts.entry(ext_str).or_insert(0) += 1;
-                }
+        for entry in walkdir::WalkDir::new(project_root).max_depth(3).into_iter().flatten() {
+            if let Some(extension) = entry.path().extension() {
+                let ext_str = extension.to_string_lossy().to_string();
+                *extension_counts.entry(ext_str).or_insert(0) += 1;
             }
         }
 
@@ -3912,7 +3908,7 @@ impl ContextAnalyzer {
                     for line in deps_section.lines() {
                         if line.contains("\": \"") {
                             if let Some(dep) = line.split("\": \"").next() {
-                                if let Some(dep) = dep.split('"').last() {
+                                if let Some(dep) = dep.split('"').next_back() {
                                     dependencies.push(dep.trim_matches('"').to_string());
                                 }
                             }
@@ -4004,16 +4000,14 @@ impl ContextAnalyzer {
     async fn get_sample_files(&self, context: &ProjectContext, project_root: &str, max_files: usize) -> Result<Vec<String>> {
         let mut files = Vec::new();
 
-        for entry in walkdir::WalkDir::new(project_root).max_depth(3) {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_file() {
-                    if let Some(extension) = entry.path().extension() {
-                        let ext_str = extension.to_string_lossy();
-                        if self.is_source_file(&context.language, &ext_str) {
-                            files.push(entry.path().to_string_lossy().to_string());
-                            if files.len() >= max_files {
-                                break;
-                            }
+        for entry in walkdir::WalkDir::new(project_root).max_depth(3).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                if let Some(extension) = entry.path().extension() {
+                    let ext_str = extension.to_string_lossy();
+                    if self.is_source_file(&context.language, &ext_str) {
+                        files.push(entry.path().to_string_lossy().to_string());
+                        if files.len() >= max_files {
+                            break;
                         }
                     }
                 }
@@ -4111,29 +4105,25 @@ impl ContextAnalyzer {
     async fn build_file_structure_map(&self, project_root: &str) -> Result<HashMap<String, Vec<String>>> {
         let mut structure = HashMap::new();
 
-        for entry in walkdir::WalkDir::new(project_root).max_depth(2) {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_dir() {
-                    let path = entry.path().strip_prefix(project_root).unwrap_or(entry.path());
-                    let path_str = path.to_string_lossy().to_string();
+        for entry in walkdir::WalkDir::new(project_root).max_depth(2).into_iter().flatten() {
+            if entry.file_type().is_dir() {
+                let path = entry.path().strip_prefix(project_root).unwrap_or(entry.path());
+                let path_str = path.to_string_lossy().to_string();
 
-                    if !path_str.is_empty() && !path_str.contains('.') {
-                        let mut files = Vec::new();
+                if !path_str.is_empty() && !path_str.contains('.') {
+                    let mut files = Vec::new();
 
-                        // Get files in this directory
-                        if let Ok(read_dir) = std::fs::read_dir(entry.path()) {
-                            for file_entry in read_dir {
-                                if let Ok(file_entry) = file_entry {
-                                    if file_entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                                        files.push(file_entry.file_name().to_string_lossy().to_string());
-                                    }
-                                }
+                    // Get files in this directory
+                    if let Ok(read_dir) = std::fs::read_dir(entry.path()) {
+                        for file_entry in read_dir.flatten() {
+                            if file_entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                                files.push(file_entry.file_name().to_string_lossy().to_string());
                             }
                         }
+                    }
 
-                        if !files.is_empty() {
-                            structure.insert(path_str, files);
-                        }
+                    if !files.is_empty() {
+                        structure.insert(path_str, files);
                     }
                 }
             }
@@ -4408,11 +4398,10 @@ impl ContextAnalyzer {
         *count += 1.0;
 
         // Update error patterns if action indicates error handling
-        if action.contains("error") || action.contains("exception") {
-            if !self.user_profile.error_patterns.contains(&context.to_string()) {
+        if (action.contains("error") || action.contains("exception"))
+            && !self.user_profile.error_patterns.contains(&context.to_string()) {
                 self.user_profile.error_patterns.push(context.to_string());
             }
-        }
 
         // Update common patterns
         if !self.user_profile.common_patterns.contains(&context.to_string()) {
@@ -4444,6 +4433,12 @@ impl ContextAnalyzer {
     pub fn clear_context(&mut self) {
         self.project_context.clear();
         // Keep user profile and preferences
+    }
+}
+
+impl Default for ContextAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -4603,8 +4598,8 @@ impl SecurityAnalyzer {
             }
 
             // Check for potential command injection
-            if line.contains("std::process::Command") && (line.contains("arg(") || line.contains("args(")) {
-                if line.contains("user_input") || line.contains("input") {
+            if line.contains("std::process::Command") && (line.contains("arg(") || line.contains("args("))
+                && (line.contains("user_input") || line.contains("input")) {
                     issues.push(CodeIssue {
                         id: Uuid::new_v4().to_string(),
                         severity: IssueSeverity::Warning,
@@ -4613,7 +4608,6 @@ impl SecurityAnalyzer {
                         column: 1,
                     });
                 }
-            }
 
             // Check for unsafe code blocks
             if line.contains("unsafe {") {
@@ -4766,8 +4760,8 @@ impl SecurityAnalyzer {
             }
 
             // Check for SQL injection patterns
-            if line.contains("cursor.execute(") || line.contains("execute(") {
-                if line.contains("%") && (line.contains("request.") || line.contains("input")) {
+            if (line.contains("cursor.execute(") || line.contains("execute("))
+                && line.contains("%") && (line.contains("request.") || line.contains("input")) {
                     issues.push(CodeIssue {
                         id: Uuid::new_v4().to_string(),
                         severity: IssueSeverity::Critical,
@@ -4776,7 +4770,6 @@ impl SecurityAnalyzer {
                         column: 1,
                     });
                 }
-            }
         }
 
         issues
@@ -4801,7 +4794,7 @@ impl SecurityAnalyzer {
         let mut threats = Vec::new();
 
         // Check code against known threat models
-        for (_model_id, threat_model) in &self._threat_models {
+        for threat_model in self._threat_models.values() {
             let mut threat_detected = false;
             let mut relevant_lines = Vec::new();
 
@@ -4978,6 +4971,12 @@ impl SecurityAnalyzer {
     }
 }
 
+impl Default for SecurityAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceAnalyzer {
     pub fn new() -> Self {
         let mut analyzer = Self {
@@ -5117,6 +5116,12 @@ impl PerformanceAnalyzer {
             }
             _ => false,
         }
+    }
+}
+
+impl Default for PerformanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -5621,6 +5626,12 @@ pub struct RefactoringSuggestion {
     pub risk_assessment: f32,
 }
 
+impl Default for RefactoringEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SeniorEngineerKnowledge {
     pub fn new() -> Self {
         let mut knowledge = Self {
@@ -5757,6 +5768,12 @@ impl SeniorEngineerKnowledge {
             sections: vec!["Overview".to_string(), "Endpoints".to_string(), "Examples".to_string()],
             examples: vec!["GET /api/users - Retrieve all users".to_string()],
         });
+    }
+}
+
+impl Default for SeniorEngineerKnowledge {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -5977,6 +5994,12 @@ impl TerminalIntelligence {
             ],
             flags: vec!["-h".to_string(), "-i".to_string(), "-T".to_string()],
         });
+    }
+}
+
+impl Default for TerminalIntelligence {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
