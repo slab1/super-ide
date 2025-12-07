@@ -106,6 +106,15 @@ pub enum EventBusError {
     
     #[error("Invalid event type")]
     InvalidEvent,
+    
+    #[error("Mutex poisoned: {0}")]
+    MutexPoisoned(String),
+    
+    #[error("Channel not found: {0}")]
+    ChannelNotFound(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
 }
 
 /// Event subscriber handle
@@ -161,14 +170,17 @@ impl EventBus {
     
     /// Subscribe to events on a channel
     pub fn subscribe(&self, channel: &str) -> Result<EventSubscriber, EventBusError> {
-        let mut channels = self.channels.lock().unwrap();
+        let mut channels = self.channels.lock()
+            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         if !channels.contains_key(channel) {
             let (sender, _) = broadcast::channel(100);
             channels.insert(channel.to_string(), sender);
         }
         
-        let sender = channels.get(channel).unwrap().clone();
+        let sender = channels.get(channel)
+            .cloned()
+            .ok_or_else(|| EventBusError::ChannelNotFound(channel.to_string()))?;
         let receiver = sender.subscribe();
         
         Ok(EventSubscriber {
@@ -179,10 +191,11 @@ impl EventBus {
     
     /// Publish an event to a channel
     pub fn publish(&self, channel: &str, event: IdeEvent) -> Result<(), EventBusError> {
-        let channels = self.channels.lock().unwrap();
+        let channels = self.channels.lock()
+            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         if let Some(sender) = channels.get(channel) {
-            if let Err(_) = sender.send(event) {
+            if sender.send(event).is_err() {
                 return Err(EventBusError::ChannelClosed);
             }
         }
@@ -192,10 +205,11 @@ impl EventBus {
     
     /// Publish event to all subscribers
     pub fn broadcast(&self, event: IdeEvent) -> Result<(), EventBusError> {
-        let channels = self.channels.lock().unwrap();
+        let channels = self.channels.lock()
+            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         for (_, sender) in channels.iter() {
-            if let Err(_) = sender.send(event.clone()) {
+            if sender.send(event.clone()).is_err() {
                 // Channel closed, continue with others
                 continue;
             }
@@ -208,8 +222,12 @@ impl EventBus {
     pub fn create_request_channel(&self, name: &str) -> EventRequestHandler {
         let (sender, mut receiver) = mpsc::unbounded_channel::<EventRequest>();
         
-        let mut request_channels = self.request_channels.lock().unwrap();
-        request_channels.insert(name.to_string(), sender);
+        // Handle mutex lock failure gracefully
+        if let Ok(mut request_channels) = self.request_channels.lock() {
+            request_channels.insert(name.to_string(), sender);
+        } else {
+            e!("Failed to acquire request channels lock for '{}'", name);
+        }
         
         // Start background task to handle requests
         tokio::spawn(async move {
@@ -257,14 +275,15 @@ impl EventBus {
         name: &str,
         request: R,
     ) -> Result<EventResponse, EventBusError> {
-        let request_channels = self.request_channels.lock().unwrap();
+        let request_channels = self.request_channels.lock()
+            .map_err(|e| EventBusError::MutexPoisoned("request_channels".to_string()))?;
         
         if let Some(sender) = request_channels.get(name) {
             let (response_sender, response_receiver) = oneshot::channel::<EventResponse>();
             
             let wrapped_request = request.into().with_response_sender(response_sender);
             
-            if let Err(_) = sender.send(wrapped_request) {
+            if sender.send(wrapped_request).is_err() {
                 return Err(EventBusError::ChannelClosed);
             }
             
@@ -371,10 +390,12 @@ impl EventSubscriber {
         T: for<'de> serde::Deserialize<'de>,
     {
         while let Ok(event) = self.receiver.recv().await {
-            if let Ok(deserialized) = serde_json::from_value::<T>(
-                serde_json::to_value(event).unwrap()
-            ) {
-                return Some(deserialized);
+            if let Ok(serialized) = serde_json::to_value(event)
+                .map_err(|e| eprintln!("Serialization error: {}", e))
+            {
+                if let Ok(deserialized) = serde_json::from_value::<T>(serialized) {
+                    return Some(deserialized);
+                }
             }
         }
         None
@@ -389,10 +410,12 @@ impl EventSubscriber {
         
         tokio::spawn(async move {
             while let Some(event) = _receiver.recv().await {
-                if let Ok(deserialized) = serde_json::from_value::<T>(
-                    serde_json::to_value(event).unwrap()
-                ) {
-                    let _ = sender.send(deserialized);
+                if let Ok(serialized) = serde_json::to_value(event)
+                    .map_err(|e| eprintln!("Serialization error: {}", e))
+                {
+                    if let Ok(deserialized) = serde_json::from_value::<T>(serialized) {
+                        let _ = sender.send(deserialized);
+                    }
                 }
             }
         });

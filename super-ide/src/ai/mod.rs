@@ -3185,8 +3185,10 @@ impl SemanticAnalyzer {
         let name = self.extract_node_text(node, source, "type_identifier")?;
         let mut methods = Vec::new();
         let mut fields = Vec::new();
+        let mut inheritance = Vec::new();
+        let mut interfaces = Vec::new();
 
-        // Extract fields and methods
+        // Extract fields, methods, inheritance, and interfaces
         for child in node.children(&mut node.walk()) {
             match child.kind() {
                 "field_declaration" | "field_definition" => {
@@ -3199,6 +3201,21 @@ impl SemanticAnalyzer {
                         methods.push(func);
                     }
                 }
+                "super_class" | "base_class" => {
+                    if let Some(parent_class) = self.extract_node_text(&child, source, "type_identifier") {
+                        inheritance.push(parent_class);
+                    }
+                }
+                "super_interfaces" | "implements" => {
+                    // Extract interface names
+                    for interface_child in child.children(&mut child.walk()) {
+                        if interface_child.kind() == "type_identifier" {
+                            if let Some(interface_name) = self.extract_node_text(&interface_child, source, "type_identifier") {
+                                interfaces.push(interface_name);
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -3207,8 +3224,8 @@ impl SemanticAnalyzer {
             name,
             methods,
             fields,
-            inheritance: Vec::new(), // TODO: Extract inheritance info
-            interfaces: Vec::new(), // TODO: Extract interface info
+            inheritance,
+            interfaces,
         })
     }
 
@@ -3295,9 +3312,39 @@ impl SemanticAnalyzer {
     fn extract_field_info(&self, node: &Node, source: &str) -> Option<FieldInfo> {
         let name = self.extract_node_text(node, source, "field_identifier")?;
         let field_type = self.extract_type_annotation(node, source).unwrap_or_else(|| "Unknown".to_string());
-        let visibility = Visibility::Private; // Default
-        let is_static = false; // TODO: Detect static fields
-        let default_value = None; // TODO: Extract default values
+        
+        // Detect visibility modifiers
+        let mut visibility = Visibility::Private;
+        let mut is_static = false;
+        
+        // Check for visibility modifiers and static keyword
+        for child in node.children(&mut node.walk()) {
+            match child.kind() {
+                "public" | "visibility_modifier" => {
+                    // Check the actual text to determine visibility
+                    if let Some(text) = child.utf8_text(source.as_bytes()).ok() {
+                        match text.trim() {
+                            "public" | "pub" => visibility = Visibility::Public,
+                            "private" | "priv" => visibility = Visibility::Private,
+                            "protected" => visibility = Visibility::Protected,
+                            _ => {}
+                        }
+                    }
+                }
+                "static" => {
+                    is_static = true;
+                }
+                _ => {}
+            }
+        }
+        
+        // Extract default value if present
+        let mut default_value = None;
+        if let Some(value_child) = node.child_by_field_name("value") {
+            if let Some(value_text) = value_child.utf8_text(source.as_bytes()).ok() {
+                default_value = Some(value_text.to_string());
+            }
+        }
 
         Some(FieldInfo {
             name,
@@ -5915,7 +5962,8 @@ mod tests {
         let config = AiConfig::default();
         let engine = AiEngine::new(config);
         
-        let retrieved_config = engine.get_config().await.unwrap();
+        let retrieved_config = engine.get_config().await
+            .expect("Failed to retrieve config in test");
         assert!(retrieved_config.enabled);
         assert_eq!(retrieved_config.provider, "mock");
     }
@@ -5931,7 +5979,8 @@ mod tests {
             max_tokens: Some(100),
         };
 
-        let response = engine.complete_code(request).await.unwrap();
+        let response = engine.complete_code(request).await
+            .expect("Failed to complete code in test");
         assert!(!response.text.is_empty());
         assert!(response.confidence >= 0.0 && response.confidence <= 1.0);
     }
@@ -5941,7 +5990,8 @@ mod tests {
         let engine = AiEngine::new(AiConfig::default());
         
         let code = "fn main() {\n    let x = Some(42);\n    println!(\"{}\", x.unwrap());\n}";
-        let result = engine.analyze_code(code, "rust").await.unwrap();
+        let result = engine.analyze_code(code, "rust").await
+            .expect("Failed to analyze code in test");
         
         assert!(!result.issues.is_empty() || !result.suggestions.is_empty());
     }
@@ -5950,8 +6000,10 @@ mod tests {
     async fn test_learning_feedback() {
         let engine = AiEngine::new(AiConfig::default());
         
-        engine.learn_from_feedback("pattern1".to_string(), true).await.unwrap();
-        engine.learn_from_feedback("pattern1".to_string(), false).await.unwrap();
+        engine.learn_from_feedback("pattern1".to_string(), true).await
+            .expect("Failed to learn positive feedback in test");
+        engine.learn_from_feedback("pattern1".to_string(), false).await
+            .expect("Failed to learn negative feedback in test");
         
         // Verify learning data was updated
         let learning_data = engine.learning_data.read().await;

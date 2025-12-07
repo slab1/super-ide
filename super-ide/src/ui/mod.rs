@@ -508,18 +508,34 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
                 context,
             });
         }
-        ClientMessage::SaveFeedback { suggestion_id: _, rating: _, accepted: _, context: _ } => {
-            // TODO: Implement user feedback
-            // let feedback = UserFeedback {
-            //     timestamp: chrono::Utc::now(),
-            //     suggestion_id,
-            //     rating,
-            //     accepted,
-            //     context,
-            // };
+        ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
+            // Implement user feedback functionality
+            let feedback = crate::ai::UserFeedback {
+                timestamp: chrono::Utc::now(),
+                suggestion_id: suggestion_id.clone(),
+                rating,
+                accepted,
+                context,
+                feedback_type: if accepted { "acceptance".to_string() } else { "rejection".to_string() },
+            };
             
-            // let ai_engine = state.ide.ai_engine();
-            // ai_engine.learn_from_feedback(feedback).await;
+            // Send feedback to AI engine for learning
+            if let Some(ai_engine) = state.ide.ai_engine() {
+                // Use learn_from_feedback method with string-based pattern ID
+                let pattern_id = format!("suggestion_{}", suggestion_id);
+                if let Err(e) = ai_engine.learn_from_feedback(pattern_id, accepted).await {
+                    eprintln!("Failed to process user feedback: {}", e);
+                }
+            }
+            
+            // Log feedback for analytics
+            info!(
+                "User feedback: suggestion_id={}, rating={}, accepted={}, context_len={}",
+                suggestion_id,
+                rating,
+                accepted,
+                context.len()
+            );
         }
         ClientMessage::CodeChange { document_id, content, position } => {
             let _ = state.event_sender.send(UiEvent::CodeChanged {

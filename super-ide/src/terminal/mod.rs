@@ -189,9 +189,12 @@ impl TerminalManager {
             .spawn()
             .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
         
-        let mut stdin = child.stdin.take().unwrap();
-        let mut stdout = child.stdout.take().unwrap();
-        let mut stderr = child.stderr.take().unwrap();
+        let mut stdin = child.stdin.take()
+            .ok_or_else(|| TerminalError::ProcessExecution("Failed to get stdin handle".to_string()))?;
+        let mut stdout = child.stdout.take()
+            .ok_or_else(|| TerminalError::ProcessExecution("Failed to get stdout handle".to_string()))?;
+        let mut stderr = child.stderr.take()
+            .ok_or_else(|| TerminalError::ProcessExecution("Failed to get stderr handle".to_string()))?;
         
         let session_id_clone = session_id.to_string();
         let session_id_clone_for_stdout = session_id_clone.clone();
@@ -586,7 +589,8 @@ mod tests {
         let config = TerminalConfig::default();
         let manager = TerminalManager::new(config);
         
-        let session_id = manager.create_session(Some("Test Terminal".to_string())).await.unwrap();
+        let session_id = manager.create_session(Some("Test Terminal".to_string())).await
+            .expect("Failed to create test session");
         
         let sessions = manager.list_sessions().await;
         assert_eq!(sessions.len(), 1);
@@ -598,7 +602,8 @@ mod tests {
     async fn test_command_executor() {
         let executor = CommandExecutor::default();
         
-        let result = executor.execute("echo 'Hello, World!'").await.unwrap();
+        let result = executor.execute("echo 'Hello, World!'").await
+            .expect("Failed to execute test command");
         assert!(result.exit_code == 0);
         assert!(result.stdout.contains("Hello, World!"));
         assert!(result.stderr.is_empty());

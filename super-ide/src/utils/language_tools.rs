@@ -105,7 +105,9 @@ impl LanguageTools {
         match node_type {
             "function_item" | "function_definition" | "method_definition" => {
                 if let Some(name_node) = self.find_child_by_type(node, "identifier") {
-                    let name = name_node.utf8_text(code.as_bytes()).unwrap().to_string();
+                    let name = name_node.utf8_text(code.as_bytes())
+                        .map_err(|e| eprintln!("Failed to extract function name: {}", e))
+                        .unwrap_or_else(|| "unknown_function".to_string()).to_string();
                     let signature = self.extract_function_signature(node);
                     
                     functions.push(FunctionInfo {
@@ -137,7 +139,9 @@ impl LanguageTools {
         match node_type {
             "let_declaration" | "var_declaration" | "const_declaration" => {
                 if let Some(name_node) = self.find_child_by_type(node, "identifier") {
-                    let name = name_node.utf8_text(code.as_bytes()).unwrap().to_string();
+                    let name = name_node.utf8_text(code.as_bytes())
+                        .map_err(|e| eprintln!("Failed to extract variable name: {}", e))
+                        .unwrap_or_else(|| "unknown_variable".to_string()).to_string();
                     
                     variables.push(VariableInfo {
                         name,
