@@ -49,7 +49,7 @@ pub struct SuperIDE {
     config: Arc<RwLock<Configuration>>,
     
     /// AI engine for code intelligence
-    ai_engine: Arc<AiEngine>,
+    ai_engine: AiEngine,
     
     /// Code editor instance
     editor: Arc<Mutex<Editor>>,
@@ -165,8 +165,8 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = Arc::new(AiEngine::new(AiConfig::from(&config)));
-        let editor = Editor::new(&config, ai_engine.clone()).await.map_err(|e| IdeError::Editor(e.to_string()))?;
+        let ai_engine = AiEngine::new(AiConfig::from(&config));
+        let editor = Editor::new(&config, Arc::new(ai_engine.clone())).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
         // Initialize terminal manager with default config
@@ -191,7 +191,7 @@ impl SuperIDE {
         
         Ok(Self {
             config: Arc::new(RwLock::new(config)),
-            ai_engine: Arc::new(ai_engine),
+            ai_engine,
             editor: Arc::new(Mutex::new(editor)),
             event_bus: Arc::new(event_bus),
             terminal_manager,
@@ -200,7 +200,7 @@ impl SuperIDE {
     }
     
     /// Get AI engine reference
-    pub fn ai_engine(&self) -> &Arc<AiEngine> {
+    pub fn ai_engine(&self) -> &AiEngine {
         &self.ai_engine
     }
     

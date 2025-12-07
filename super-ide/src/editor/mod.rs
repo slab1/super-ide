@@ -493,13 +493,13 @@ impl Editor {
 
         if let Ok(ai_response) = self.ai_engine.generate_completion(ai_request).await {
             // Convert AI suggestions to CompletionItem format
-            for suggestion in ai_response.suggestions {
+            for suggestion in &ai_response.suggestions {
                 completions.push(CompletionItem {
                     label: suggestion.clone(),
                     kind: CompletionKind::Snippet,
                     detail: Some("AI suggested".to_string()),
                     documentation: Some(format!("AI confidence: {:.1}%", ai_response.confidence * 100.0)),
-                    insert_text: suggestion,
+                    insert_text: suggestion.clone(),
                     sort_text: format!("a{}", suggestion), // Sort AI suggestions first
                 });
             }

@@ -362,13 +362,16 @@ async fn websocket_connection(
     state: UiState,
 ) {
     println!("🔗 New WebSocket connection established");
-    
+
     // Subscribe to events
     let mut event_receiver = state.event_sender.subscribe();
-    
+
     // Handle messages from client
     let (mut sender, mut receiver) = socket.split();
-    
+
+    // Clone IDE for the event task
+    let ide_clone = state.ide.clone();
+
     // Start event forwarding task
     let event_task = tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
@@ -390,7 +393,7 @@ async fn websocket_connection(
                 },
                 UiEvent::CompletionRequest { document_id, context } => {
                     // Get actual completions from the IDE
-                    let completions = match state.ide.get_code_completions(
+                    let completions = match ide_clone.get_code_completions(
                         &document_id,
                         (context.cursor_position.line, context.cursor_position.column),
                         &context.text_before_cursor
@@ -411,7 +414,7 @@ async fn websocket_connection(
                     }
                 }
             };
-            
+
             if let Ok(json) = serde_json::to_string(&message) {
                 if sender.send(axum::extract::ws::Message::Text(json)).await.is_err() {
                     break;
@@ -419,7 +422,7 @@ async fn websocket_connection(
             }
         }
     });
-    
+
     // Handle incoming WebSocket messages
     while let Some(msg) = receiver.next().await {
         if let Ok(msg) = msg {
@@ -432,7 +435,7 @@ async fn websocket_connection(
             break;
         }
     }
-    
+
     event_task.abort();
     println!("🔌 WebSocket connection closed");
 }
