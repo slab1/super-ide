@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{Duration, Instant};
 
@@ -328,7 +328,7 @@ impl RealTimeTerminal {
     /// Create a new real-time terminal
     pub fn new(session_id: String) -> Self {
         Self {
-            session_id,
+            session_id: session_id.clone(),
             process: None,
             stdin_tx: None,
             stdout_rx: None,
@@ -337,35 +337,125 @@ impl RealTimeTerminal {
             start_time: Instant::now(),
         }
     }
+
+    /// Get the session ID
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
     
     /// Execute a command in the terminal
     pub async fn execute_command(&mut self, command: &str) -> IdeResult<ProcessResult> {
         let start_time = Instant::now();
-        
+
         // Split command into program and arguments
         let parts: Vec<&str> = command.split_whitespace().collect();
         if parts.is_empty() {
             return Err(TerminalError::ProcessExecution("Empty command".to_string()).into());
         }
-        
+
         let program = parts[0];
         let args = &parts[1..];
-        
-        // Execute the command
-        let output = Command::new(program)
+
+        // Spawn the process asynchronously
+        let child = tokio::process::Command::new(program)
             .args(args)
-            .output()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
-        
+
+        // Store the process handle
+        self.process = Some(child);
+
+        // Set up communication channels if available
+        if let Some(ref mut child_proc) = self.process {
+            if let Some(stdout) = child_proc.stdout.take() {
+                let (tx, rx) = mpsc::unbounded_channel();
+                self.stdout_rx = Some(rx);
+
+                tokio::spawn(async move {
+                    let mut reader = tokio::io::BufReader::new(stdout);
+                    let mut line = String::new();
+                    while let Ok(bytes_read) = reader.read_line(&mut line).await {
+                        if bytes_read == 0 {
+                            break;
+                        }
+                        let _ = tx.send(line.clone());
+                        line.clear();
+                    }
+                });
+            }
+
+            if let Some(stderr) = child_proc.stderr.take() {
+                let (tx, rx) = mpsc::unbounded_channel();
+                self.stderr_rx = Some(rx);
+
+                tokio::spawn(async move {
+                    let mut reader = tokio::io::BufReader::new(stderr);
+                    let mut line = String::new();
+                    while let Ok(bytes_read) = reader.read_line(&mut line).await {
+                        if bytes_read == 0 {
+                            break;
+                        }
+                        let _ = tx.send(line.clone());
+                        line.clear();
+                    }
+                });
+            }
+
+            if let Some(stdin) = child_proc.stdin.take() {
+                let (tx, rx) = mpsc::unbounded_channel();
+                self.stdin_tx = Some(tx);
+
+                tokio::spawn(async move {
+                    let mut writer = tokio::io::BufWriter::new(stdin);
+                    let mut rx = rx;
+                    while let Some(input) = rx.recv().await {
+                        if writer.write_all(input.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        if writer.flush().await.is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Wait for the process to complete
+        let status = if let Some(ref mut child_proc) = self.process {
+            child_proc.wait().await
+                .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?
+        } else {
+            return Err(TerminalError::ProcessExecution("Failed to start process".to_string()).into());
+        };
+
         let execution_time = start_time.elapsed();
-        
+
+        // Collect output from channels if available
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+
+        if let Some(ref mut rx) = self.stdout_rx {
+            while let Ok(line) = rx.try_recv() {
+                stdout.push_str(&line);
+            }
+        }
+
+        if let Some(ref mut rx) = self.stderr_rx {
+            while let Ok(line) = rx.try_recv() {
+                stderr.push_str(&line);
+            }
+        }
+
         let result = ProcessResult {
-            exit_code: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_code: status.code().unwrap_or(-1),
+            stdout,
+            stderr,
             execution_time,
         };
-        
+
         Ok(result)
     }
     

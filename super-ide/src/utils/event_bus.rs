@@ -119,6 +119,29 @@ pub struct EventBroadcaster {
     sender: broadcast::Sender<IdeEvent>,
 }
 
+impl EventBroadcaster {
+    /// Create a new event broadcaster
+    pub fn new(capacity: usize) -> Self {
+        let (sender, _) = broadcast::channel(capacity);
+        Self { sender }
+    }
+
+    /// Send an event
+    pub fn send(&self, event: IdeEvent) -> Result<usize, broadcast::error::SendError<IdeEvent>> {
+        self.sender.send(event)
+    }
+
+    /// Get the number of receivers
+    pub fn receiver_count(&self) -> usize {
+        self.sender.receiver_count()
+    }
+
+    /// Subscribe to events
+    pub fn subscribe(&self) -> broadcast::Receiver<IdeEvent> {
+        self.sender.subscribe()
+    }
+}
+
 /// Main event bus
 #[derive(Clone)]
 #[derive(Debug)]
@@ -258,6 +281,18 @@ impl EventBus {
 /// Request handler for a specific channel
 pub struct EventRequestHandler {
     name: String,
+}
+
+impl EventRequestHandler {
+    /// Get the handler name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Check if this handler matches a name
+    pub fn matches(&self, name: &str) -> bool {
+        self.name == name
+    }
 }
 
 /// Event request types

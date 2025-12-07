@@ -583,8 +583,8 @@ fn detect_project_type(path: &PathBuf) -> Result<String> {
 
 /// Show current configuration
 async fn show_configuration(args: &Args) -> Result<()> {
-    let _config = load_configuration(args).await?;
-    
+    let config = load_configuration(args).await?;
+
     println!("📋 Super IDE Configuration:");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Workspace: {}", config.ide.workspace_path);
@@ -593,7 +593,7 @@ async fn show_configuration(args: &Args) -> Result<()> {
     println!("Font size: {}px", config.editor.font_size);
     println!("Theme: {}", config.theme.name);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    
+
     Ok(())
 }
 

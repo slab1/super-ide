@@ -69,6 +69,10 @@ env_logger = "0.10"
 dirs = "5.0"
 lru = "0.12"
 sysinfo = { version = "0.29", default-features = false }
+
+platform = "1.0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 rusl = "0.1"
 
 [dev-dependencies]
@@ -77,6 +81,10 @@ temp-env = "0.2"
 [features]
 default = ["web"]
 web = []
+tree-sitter-rust = []
+tree-sitter-python = []
+tree-sitter-javascript = []
+sysinfo = []
 
 [[example]]
 name = "terminal_demo"

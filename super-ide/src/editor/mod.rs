@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Configuration;
 use crate::utils::file_manager::FileManager;
+use crate::ai::{AiEngine, CompletionRequest};
 
 /// Editor errors
 #[derive(Error, Debug)]
@@ -94,11 +95,11 @@ pub struct Selection {
 /// Code buffer with editing operations
 #[derive(Debug)]
 pub struct CodeBuffer {
-    document: Arc<RwLock<Document>>,
-    cursor: CursorPosition,
-    selection: Option<Selection>,
-    undo_stack: Vec<EditOperation>,
-    redo_stack: Vec<EditOperation>,
+    pub document: Arc<RwLock<Document>>,
+    pub cursor: CursorPosition,
+    pub selection: Option<Selection>,
+    pub undo_stack: Vec<EditOperation>,
+    pub redo_stack: Vec<EditOperation>,
 }
 
 /// Edit operation for undo/redo
@@ -215,16 +216,17 @@ pub struct Editor {
     file_manager: FileManager,
     language_support: Arc<RwLock<Vec<LanguageSupport>>>,
     config: Arc<RwLock<Configuration>>,
+    ai_engine: Arc<AiEngine>,
 }
 
 impl Editor {
     /// Create a new editor instance
-    pub async fn new(config: &Configuration) -> Result<Self, EditorError> {
+    pub async fn new(config: &Configuration, ai_engine: Arc<AiEngine>) -> Result<Self, EditorError> {
         let file_manager = FileManager::new().await
             .map_err(|e| EditorError::Config(e.to_string()))?;
-            
+
         let mut language_support = Vec::new();
-        
+
         // Initialize language support
         language_support.push(LanguageSupport {
             name: "Rust".to_string(),
@@ -263,15 +265,16 @@ impl Editor {
                 }],
             },
         });
-        
+
         // Add more language support...
-        
+
         Ok(Self {
             documents: Arc::new(RwLock::new(Vec::new())),
             active_document: Arc::new(RwLock::new(None)),
             file_manager,
             language_support: Arc::new(RwLock::new(language_support)),
             config: Arc::new(RwLock::new(config.clone())),
+            ai_engine,
         })
     }
     
@@ -478,32 +481,55 @@ impl Editor {
     
     /// Get auto-completion suggestions
     pub async fn get_completions(&self, context: &CompletionContext) -> Result<Vec<CompletionItem>, EditorError> {
-        let active = self.active_document.read().await;
         let mut completions = Vec::new();
-        
+
+        // First try AI-powered completions
+        let ai_request = CompletionRequest {
+            prompt: format!("Complete code in {}: {}", context.language, context.text_before_cursor),
+            context: context.text_before_cursor.clone(),
+            language: context.language.clone(),
+            max_tokens: Some(50),
+        };
+
+        if let Ok(ai_response) = self.ai_engine.generate_completion(ai_request).await {
+            // Convert AI suggestions to CompletionItem format
+            for suggestion in ai_response.suggestions {
+                completions.push(CompletionItem {
+                    label: suggestion.clone(),
+                    kind: CompletionKind::Snippet,
+                    detail: Some("AI suggested".to_string()),
+                    documentation: Some(format!("AI confidence: {:.1}%", ai_response.confidence * 100.0)),
+                    insert_text: suggestion,
+                    sort_text: format!("a{}", suggestion), // Sort AI suggestions first
+                });
+            }
+        }
+
+        // Add language-specific completions
+        let active = self.active_document.read().await;
         if let Some(doc) = active.as_ref() {
             let _doc_read = doc.read().await;
             let language_support = self.language_support.read().await;
-            
+
             // Find language support
             if let Some(lang_support) = language_support.iter().find(|lang| lang.name == context.language) {
                 // Get word before cursor
                 let word = self.get_word_at_cursor(&context.text_before_cursor);
-                
+
                 // Add keyword completions
                 for keyword in &lang_support.keywords {
                     if keyword.starts_with(&word) && !word.is_empty() {
                         completions.push(CompletionItem {
                             label: keyword.clone(),
                             kind: CompletionKind::Keyword,
-                            detail: None,
+                            detail: Some("Keyword".to_string()),
                             documentation: None,
                             insert_text: keyword.clone(),
-                            sort_text: keyword.clone(),
+                            sort_text: format!("b{}", keyword), // Sort keywords after AI
                         });
                     }
                 }
-                
+
                 // Add built-in completions
                 for builtin in &lang_support.builtins {
                     if builtin.starts_with(&word) && !word.is_empty() {
@@ -513,16 +539,16 @@ impl Editor {
                             detail: Some("Built-in type".to_string()),
                             documentation: None,
                             insert_text: builtin.clone(),
-                            sort_text: builtin.clone(),
+                            sort_text: format!("c{}", builtin), // Sort builtins last
                         });
                     }
                 }
             }
         }
-        
-        // Sort completions by relevance
-        completions.sort_by(|a, b| a.label.cmp(&b.label));
-        
+
+        // Sort completions by sort_text (AI first, then keywords, then builtins)
+        completions.sort_by(|a, b| a.sort_text.cmp(&b.sort_text));
+
         Ok(completions)
     }
     
@@ -539,7 +565,15 @@ impl Editor {
                 };
                 (content_clone, doc_read.language.clone())
             };
-            
+
+            // Check configuration for format on save setting
+            let config = self.config.read().await;
+            let should_format = config.editor.format_on_save;
+
+            if !should_format {
+                return Ok(());
+            }
+
             // Apply formatting based on language
             let formatted_content = match language.as_str() {
                 "Rust" => {
@@ -564,7 +598,7 @@ impl Editor {
                     lines.join("\n")
                 }
             };
-            
+
             // Update content and mark as modified
             {
                 let mut doc_write = doc.write().await;
@@ -574,11 +608,24 @@ impl Editor {
                 }
                 doc_write.is_modified = true;
             }
-            
+
             // Reparse syntax tree
             self.parse_syntax_tree(doc).await;
         }
-        
+
+        Ok(())
+    }
+
+    /// Get editor configuration
+    pub async fn get_config(&self) -> crate::config::EditorSettings {
+        let config = self.config.read().await;
+        config.editor.clone()
+    }
+
+    /// Update editor configuration
+    pub async fn update_config(&self, new_config: crate::config::EditorSettings) -> Result<(), EditorError> {
+        let mut config = self.config.write().await;
+        config.editor = new_config;
         Ok(())
     }
     
