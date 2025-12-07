@@ -14,10 +14,10 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 use log::{info, warn, error};
 use uuid::Uuid;
-use chrono::Utc;
+
 
 use crate::core::SuperIDE;
-use crate::terminal::{TerminalManager, TerminalSession, TerminalError};
+use crate::terminal::{TerminalManager};
 
 // WebSocket message types
 #[derive(Debug, Serialize, Deserialize)]
@@ -172,7 +172,7 @@ pub async fn terminal_websocket_connection(
     
     // Cleanup: Close all active sessions
     info!("Cleaning up terminal sessions for connection: {}", session_id);
-    let mut terminal_manager = state.terminal_manager.write().await;
+    let terminal_manager = state.terminal_manager.write().await;
     
     for (session_id, _) in active_sessions {
         if let Err(e) = terminal_manager.close_session(&session_id).await {
@@ -189,14 +189,14 @@ async fn handle_terminal_message(
     state: &TerminalWebSocketState,
     active_sessions: &mut std::collections::HashMap<String, mpsc::UnboundedReceiver<String>>,
     command_history: &mut std::collections::HashMap<String, Vec<String>>,
-    connection_id: &str,
+    _connection_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match message {
-        TerminalMessage::CreateSession { session_id, shell, cwd } => {
+        TerminalMessage::CreateSession { session_id, shell: _, cwd: _ } => {
             let actual_session_id = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
             info!("Creating terminal session: {}", actual_session_id);
             
-            let mut terminal_manager = state.terminal_manager.write().await;
+            let terminal_manager = state.terminal_manager.write().await;
             
             match terminal_manager.create_session(Some(format!("Terminal {}", actual_session_id))).await {
                 Ok(_session_id) => {
@@ -235,7 +235,7 @@ async fn handle_terminal_message(
         TerminalMessage::ExecuteCommand { session_id, command, cwd } => {
             info!("Executing command '{}' in session {}", command, session_id);
             
-            let mut terminal_manager = state.terminal_manager.write().await;
+            let terminal_manager = state.terminal_manager.write().await;
             
             match terminal_manager.execute_command(&session_id, &command, cwd.as_deref()).await {
                 Ok(_) => {
@@ -263,7 +263,7 @@ async fn handle_terminal_message(
         TerminalMessage::Resize { session_id, width, height } => {
             info!("Resizing terminal session {} to {}x{}", session_id, width, height);
             
-            let mut terminal_manager = state.terminal_manager.write().await;
+            let terminal_manager = state.terminal_manager.write().await;
             
             if let Err(e) = terminal_manager.resize_session(&session_id, width, height).await {
                 error!("Failed to resize terminal session {}: {}", session_id, e);
@@ -281,7 +281,7 @@ async fn handle_terminal_message(
         TerminalMessage::CloseSession { session_id } => {
             info!("Closing terminal session: {}", session_id);
             
-            let mut terminal_manager = state.terminal_manager.write().await;
+            let terminal_manager = state.terminal_manager.write().await;
             
             match terminal_manager.close_session(&session_id).await {
                 Ok(exit_code) => {
@@ -344,7 +344,7 @@ async fn send_message_to_client(
 
 // Background task to forward terminal output to WebSocket clients
 pub async fn forward_terminal_output(
-    terminal_manager: Arc<RwLock<TerminalManager>>,
+    _terminal_manager: Arc<RwLock<TerminalManager>>,
     mut output_receiver: mpsc::UnboundedReceiver<(String, String, bool)>,
     session_id: String,
 ) {
@@ -380,7 +380,7 @@ mod tests {
         let parsed: TerminalMessage = serde_json::from_str(&json).unwrap();
         
         match parsed {
-            TerminalMessage::CreateSession { session_id, shell, cwd } => {
+            TerminalMessage::CreateSession { session_id, shell: _, cwd: _ } => {
                 assert_eq!(shell, Some("bash".to_string()));
                 assert_eq!(cwd, Some("/home/user".to_string()));
             }

@@ -352,10 +352,10 @@ pub async fn ai_chat(
 /// Get code completions
 pub async fn get_completions(
     State(state): State<super::ui::AppState>,
-    Json(request): Json<CodeCompletionRequest>,
+    Json(_request): Json<CodeCompletionRequest>,
 ) -> impl IntoResponse {
     let editor = state.ide.editor();
-    let editor_lock = editor.lock().await;
+    let _editor_lock = editor.lock().await;
     
     // For now, return a simple completion response
     // In a real implementation, this would use the editor's completion system

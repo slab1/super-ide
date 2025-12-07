@@ -6,8 +6,8 @@ use std::sync::Arc;
 use super_ide::{
     initialize, Configuration,
     ui::WebUI,
-    api::create_api_router,
-    terminal::ws_handler::terminal_websocket_handler,
+
+
     utils::performance::global_performance_monitor,
     utils::file_manager::FileManager,
     config::AIProvider,
@@ -139,7 +139,7 @@ async fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
     
     // Create API state
-    let api_state = super_ide::api::ApiState {
+    let _api_state = super_ide::api::ApiState {
         ide: Arc::new(ide.clone()),
         file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
         event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
@@ -654,7 +654,7 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
     
     // Create API state
-    let api_state = super_ide::api::ApiState {
+    let _api_state = super_ide::api::ApiState {
         ide: Arc::new(ide.clone()),
         file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
         event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),

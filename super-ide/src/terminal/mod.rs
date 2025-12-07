@@ -14,7 +14,7 @@ use std::process::{Stdio};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
 use crate::core::IdeResult;
 
@@ -159,7 +159,7 @@ impl TerminalManager {
         sessions.insert(session_id.clone(), session.clone());
         
         // Create output channel for WebSocket communication
-        let (output_tx, output_rx) = mpsc::unbounded_channel::<String>();
+        let (output_tx, _output_rx) = mpsc::unbounded_channel::<String>();
         
         // Store output sender for WebSocket forwarding
         {
@@ -194,7 +194,7 @@ impl TerminalManager {
         
         // Spawn task to handle stdout
         let output_tx_clone = output_tx.clone();
-        let stdout_task = tokio::spawn(async move {
+        let _stdout_task = tokio::spawn(async move {
             let mut reader = tokio::io::BufReader::new(stdout);
             let mut buffer = String::new();
             
@@ -212,7 +212,7 @@ impl TerminalManager {
         });
         
         // Spawn task to handle stderr
-        let stderr_task = tokio::spawn(async move {
+        let _stderr_task = tokio::spawn(async move {
             let mut reader = tokio::io::BufReader::new(stderr);
             let mut buffer = String::new();
             
@@ -231,7 +231,7 @@ impl TerminalManager {
         
         // Spawn task to handle input
         let mut stdin_clone = stdin;
-        let input_task = tokio::spawn(async move {
+        let _input_task = tokio::spawn(async move {
             while let Some(input) = input_rx.recv().await {
                 let _ = stdin_clone.write_all(input.as_bytes()).await;
                 let _ = stdin_clone.write_all(b"\n").await;
@@ -333,7 +333,7 @@ impl TerminalManager {
     pub async fn get_output_receiver(&self, session_id: &str) -> Option<mpsc::UnboundedReceiver<String>> {
         let output_senders = self.output_senders.read().await;
         let sender = output_senders.get(session_id)?;
-        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let (_tx, rx) = mpsc::unbounded_channel::<String>();
         let _ = sender.send("test".to_string()); // Check if sender is still valid
         Some(rx)
     }

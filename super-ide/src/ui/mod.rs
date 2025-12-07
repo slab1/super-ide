@@ -20,7 +20,7 @@ use log::info;
 use tokio::sync::RwLock;
 
 use crate::core::SuperIDE;
-use crate::api::create_api_router;
+
 use crate::terminal::ws_handler::TerminalWebSocketState;
 use crate::utils::file_manager::FileManager;
 use crate::utils::event_bus::EventBus;
@@ -211,9 +211,7 @@ async fn serve_frontend() -> impl IntoResponse {
 }
 
 /// Main HTML interface (legacy)
-async fn index() -> impl IntoResponse {
-    Html(include_str!("./web/index.html"))
-}
+
 
 /// Terminal WebSocket handler
 async fn terminal_websocket_handler(
@@ -232,19 +230,7 @@ async fn terminal_websocket_handler(
     crate::terminal::ws_handler::terminal_websocket_handler(ws, axum::extract::State(terminal_state)).await
 }
 
-/// Health check endpoint (legacy UI handler)
-async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
-    let ide_state = state.ide.get_state().await;
-    let ai_provider_result = state.ide.ai_engine().ai_provider().await;
-    let ai_provider = ai_provider_result.unwrap_or_else(|_| "local".to_string());
-    
-    Json(serde_json::json!({
-        "status": "ok",
-        "ide_running": true,
-        "documents_open": ide_state.active_tabs.len(),
-        "ai_enabled": ai_provider != "local",
-    }))
-}
+
 
 /// List files in workspace
 async fn list_files(State(state): State<AppState>) -> impl IntoResponse {
@@ -361,33 +347,7 @@ async fn get_completion(
     }
 }
 
-/// Analyze code using AI
-async fn analyze_code(
-    State(state): State<AppState>,
-    Json(payload): Json<CodeAnalysisRequest>,
-) -> impl IntoResponse {
-    let ai_engine = state.ide.ai_engine();
-    
-    match ai_engine.analyze_code(&payload.code, &payload.language).await {
-        Ok(analysis) => {
-            Json(serde_json::json!({
-                "success": true,
-                "analysis": {
-                    "language": payload.language,
-                    "complexity_score": analysis.complexity_score,
-                    "issues": analysis.issues.len(),
-                    "suggestions": analysis.suggestions.len(),
-                }
-            }))
-        }
-        Err(e) => {
-            Json(serde_json::json!({
-                "success": false,
-                "error": e.to_string()
-            }))
-        }
-    }
-}
+
 
 /// Get AI suggestion
 async fn get_ai_suggestion(
