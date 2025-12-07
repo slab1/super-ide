@@ -264,13 +264,11 @@ impl SuperIDE {
         // Scan project directory for files
         let mut project_files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&project_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                project_files.push(file_name.to_string());
-                            }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            project_files.push(file_name.to_string());
                         }
                     }
                 }
@@ -339,22 +337,22 @@ impl SuperIDE {
     
     /// Create a new terminal session
     pub async fn create_terminal(&self, title: Option<String>) -> IdeResult<String> {
-        self.terminal_manager.create_session(title).await.map_err(|e| e.into())
+        self.terminal_manager.create_session(title).await
     }
     
     /// Start a terminal session
     pub async fn start_terminal(&self, session_id: &str) -> IdeResult<()> {
-        self.terminal_manager.start_terminal(session_id).await.map_err(|e| e.into())
+        self.terminal_manager.start_terminal(session_id).await
     }
     
     /// Stop a terminal session
     pub async fn stop_terminal(&self, session_id: &str) -> IdeResult<()> {
-        self.terminal_manager.stop_terminal(session_id).await.map_err(|e| e.into())
+        self.terminal_manager.stop_terminal(session_id).await
     }
     
     /// Send input to a terminal session
     pub async fn send_terminal_input(&self, session_id: &str, input: &str) -> IdeResult<()> {
-        self.terminal_manager.send_input(session_id, input).await.map_err(|e| e.into())
+        self.terminal_manager.send_input(session_id, input).await
     }
     
     /// List all terminal sessions
@@ -468,13 +466,11 @@ impl SuperIDE {
 
         let mut files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&workspace_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                files.push(file_name.to_string());
-                            }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            files.push(file_name.to_string());
                         }
                     }
                 }

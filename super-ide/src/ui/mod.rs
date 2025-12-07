@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use futures::{StreamExt, SinkExt};
+use log::info;
 
 use crate::core::SuperIDE;
 
@@ -510,22 +511,21 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
         }
         ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
             // Implement user feedback functionality
-            let feedback = crate::ai::UserFeedback {
+            let _feedback = crate::ai::UserFeedback {
                 timestamp: chrono::Utc::now(),
                 suggestion_id: suggestion_id.clone(),
                 rating,
                 accepted,
-                context,
+                context: context.clone(),
                 feedback_type: if accepted { "acceptance".to_string() } else { "rejection".to_string() },
             };
             
             // Send feedback to AI engine for learning
-            if let Some(ai_engine) = state.ide.ai_engine() {
-                // Use learn_from_feedback method with string-based pattern ID
-                let pattern_id = format!("suggestion_{}", suggestion_id);
-                if let Err(e) = ai_engine.learn_from_feedback(pattern_id, accepted).await {
-                    eprintln!("Failed to process user feedback: {}", e);
-                }
+            let ai_engine = state.ide.ai_engine();
+            // Use learn_from_feedback method with string-based pattern ID
+            let pattern_id = format!("suggestion_{}", suggestion_id);
+            if let Err(e) = ai_engine.learn_from_feedback(pattern_id, accepted).await {
+                eprintln!("Failed to process user feedback: {}", e);
             }
             
             // Log feedback for analytics

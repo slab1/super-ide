@@ -67,6 +67,17 @@ pub struct ModelInfo {
     pub pricing_per_token: Option<f64>,
 }
 
+/// User feedback for AI learning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserFeedback {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub suggestion_id: String,
+    pub rating: i32,
+    pub accepted: bool,
+    pub context: String,
+    pub feedback_type: String,
+}
+
 /// OpenAI provider implementation
 pub struct OpenAiProvider {
     config: ModelConfig,
@@ -480,7 +491,15 @@ impl AiProviderManager {
             fallback_provider: None,
         }
     }
+}
 
+impl Default for AiProviderManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AiProviderManager {
     pub fn register_provider(&mut self, name: String, provider: Box<dyn AiProviderClient>) {
         self.providers.insert(name, provider);
     }
@@ -1674,14 +1693,14 @@ impl AiEngine {
                     let mut enhanced_suggestions = response.suggestions.clone();
                     enhanced_suggestions.extend(context_suggestions);
 
-                    return Ok(CompletionResponse {
+                    Ok(CompletionResponse {
                         text: response.text,
                         confidence: response.confidence,
                         suggestions: enhanced_suggestions,
-                    });
+                    })
                 } else {
                     // Return provider response as-is if semantic analysis fails
-                    return Ok(response);
+                    Ok(response)
                 }
             }
             Err(_) => {
@@ -1814,8 +1833,8 @@ impl AiEngine {
         let mut completions = Vec::new();
 
         // Analyze syntax tree to understand context better
-        let has_function_def = tree.functions.len() > 0;
-        let _has_class_def = tree.classes.len() > 0;
+        let has_function_def = !tree.functions.is_empty();
+        let _has_class_def = !tree.classes.is_empty();
         let import_count = tree.imports.len();
 
         if context.contains("function ") && !context.contains("{") {
@@ -1857,8 +1876,8 @@ impl AiEngine {
         let mut completions = Vec::new();
 
         // Analyze syntax tree for better context-aware completions
-        let _has_class_def = tree.classes.len() > 0;
-        let has_function_def = tree.functions.len() > 0;
+        let _has_class_def = !tree.classes.is_empty();
+        let has_function_def = !tree.functions.is_empty();
         let imports: Vec<&String> = tree.imports.iter().map(|i| &i.module_path).collect();
 
         if context.contains("def ") && !context.contains(":") {
@@ -3044,7 +3063,15 @@ impl SemanticAnalyzer {
             dependency_graph: HashMap::new(),
         }
     }
+}
 
+impl Default for SemanticAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SemanticAnalyzer {
     /// Parse code using AST and extract semantic information
     pub async fn parse_code(&mut self, code: &str, language: &str, file_path: &str) -> Result<SyntaxTree> {
         let cache_key = format!("{}_{}", file_path, code.len());

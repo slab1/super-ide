@@ -171,7 +171,7 @@ impl EventBus {
     /// Subscribe to events on a channel
     pub fn subscribe(&self, channel: &str) -> Result<EventSubscriber, EventBusError> {
         let mut channels = self.channels.lock()
-            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
+            .map_err(|_e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         if !channels.contains_key(channel) {
             let (sender, _) = broadcast::channel(100);
@@ -192,7 +192,7 @@ impl EventBus {
     /// Publish an event to a channel
     pub fn publish(&self, channel: &str, event: IdeEvent) -> Result<(), EventBusError> {
         let channels = self.channels.lock()
-            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
+            .map_err(|_e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         if let Some(sender) = channels.get(channel) {
             if sender.send(event).is_err() {
@@ -206,7 +206,7 @@ impl EventBus {
     /// Publish event to all subscribers
     pub fn broadcast(&self, event: IdeEvent) -> Result<(), EventBusError> {
         let channels = self.channels.lock()
-            .map_err(|e| EventBusError::MutexPoisoned("channels".to_string()))?;
+            .map_err(|_e| EventBusError::MutexPoisoned("channels".to_string()))?;
         
         for (_, sender) in channels.iter() {
             if sender.send(event.clone()).is_err() {
@@ -226,7 +226,7 @@ impl EventBus {
         if let Ok(mut request_channels) = self.request_channels.lock() {
             request_channels.insert(name.to_string(), sender);
         } else {
-            e!("Failed to acquire request channels lock for '{}'", name);
+            eprintln!("Failed to acquire request channels lock for '{}'", name);
         }
         
         // Start background task to handle requests
@@ -276,7 +276,7 @@ impl EventBus {
         request: R,
     ) -> Result<EventResponse, EventBusError> {
         let request_channels = self.request_channels.lock()
-            .map_err(|e| EventBusError::MutexPoisoned("request_channels".to_string()))?;
+            .map_err(|_e| EventBusError::MutexPoisoned("request_channels".to_string()))?;
         
         if let Some(sender) = request_channels.get(name) {
             let (response_sender, response_receiver) = oneshot::channel::<EventResponse>();
