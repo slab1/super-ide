@@ -390,6 +390,16 @@ pub struct AiProviderManager {
     fallback_provider: Option<String>,
 }
 
+impl std::fmt::Debug for AiProviderManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiProviderManager")
+            .field("active_provider", &self.active_provider)
+            .field("fallback_provider", &self.fallback_provider)
+            .field("providers_count", &self.providers.len())
+            .finish()
+    }
+}
+
 impl AiProviderManager {
     pub fn new() -> Self {
         Self {
@@ -965,26 +975,26 @@ pub enum Visibility {
     Internal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CompletionStyle {
     Contextual,
     Verbose,
     Concise,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LearningEventType {
     CompletionUsed,
     CompletionRejected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LearningOutcome {
     Positive,
     Negative,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptationMetrics {
     pub total_events: u32,
     pub positive_feedback_rate: f32,
@@ -994,7 +1004,7 @@ pub struct AdaptationMetrics {
     pub confidence_trend: Vec<f32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BehavioralPatterns {
     pub preferred_completion_style: CompletionStyle,
     pub common_error_patterns: Vec<String>,
@@ -1003,7 +1013,7 @@ pub struct BehavioralPatterns {
     pub productivity_metrics: ProductivityMetrics,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductivityMetrics {
     pub average_session_length: f64,
     pub completion_acceptance_rate: f32,
@@ -1012,7 +1022,7 @@ pub struct ProductivityMetrics {
     pub learning_progress: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearningEvent {
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub event_type: LearningEventType,
@@ -1023,7 +1033,7 @@ pub struct LearningEvent {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodingSession {
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub end_time: chrono::DateTime<chrono::Utc>,
@@ -1789,7 +1799,7 @@ impl AiEngine {
         }
 
         // Base confidence on context analysis
-        let mut confidence = 0.5;
+        let mut confidence: f32 = 0.5;
 
         // Increase confidence based on code structure
         if request.context.contains("fn ") || request.context.contains("function ") || request.context.contains("def ") {
@@ -1801,9 +1811,10 @@ impl AiEngine {
         }
 
         // Context-aware confidence
-        let context_analyzer = self.context_analyzer.read().await;
-        if context_analyzer.project_context.contains_key(&request.language) {
-            confidence += 0.1;
+        if let Ok(context_analyzer) = self.context_analyzer.try_read() {
+            if context_analyzer.project_context.contains_key(&request.language) {
+                confidence += 0.1;
+            }
         }
 
         confidence.min(1.0)
@@ -1870,7 +1881,7 @@ impl AiEngine {
     pub async fn analyze_code(&self, code: &str, language: &str) -> Result<AnalysisResult> {
         let mut issues = Vec::new();
         let mut suggestions = Vec::new();
-        let mut complexity_score = 0.0;
+        let mut complexity_score: f32 = 0.0;
 
         // First try AI provider for code analysis
         let provider_result = self.provider_manager.read().await
@@ -2773,21 +2784,21 @@ impl AiEngine {
 
         if language == "rust" {
             if code.contains("String::from(") && code.contains("push_str(") {
-                advice.push("Use format!() macro instead of String concatenation for better performance");
+                advice.push("Use format!() macro instead of String concatenation for better performance".to_string());
             }
             if code.contains("vec![") && code.lines().any(|line| line.contains("push(")) {
-                advice.push("Pre-allocate Vec capacity if size is known: Vec::with_capacity(size)");
+                advice.push("Pre-allocate Vec capacity if size is known: Vec::with_capacity(size)".to_string());
             }
         }
 
         if language == "python" {
             if code.contains("for ") && code.contains("range(len(") {
-                advice.push("Use enumerate() instead of range(len()) for better performance and readability");
+                advice.push("Use enumerate() instead of range(len()) for better performance and readability".to_string());
             }
         }
 
         if advice.is_empty() {
-            advice.push("Code appears to follow good performance practices");
+            advice.push("Code appears to follow good performance practices".to_string());
         }
 
         Ok(advice.join("\n"))
@@ -2800,21 +2811,21 @@ impl AiEngine {
 
         if language == "rust" {
             if code.lines().count() > 50 && code.contains("fn main()") {
-                suggestions.push("Extract main function logic into smaller, focused functions");
+                suggestions.push("Extract main function logic into smaller, focused functions".to_string());
             }
             if code.contains("if let Some") && code.contains("else") {
-                suggestions.push("Consider using match instead of if let with else for clarity");
+                suggestions.push("Consider using match instead of if let with else for clarity".to_string());
             }
         }
 
         if language == "javascript" {
             if code.contains("var ") {
-                suggestions.push("Replace var with let/const for better scoping");
+                suggestions.push("Replace var with let/const for better scoping".to_string());
             }
         }
 
         if suggestions.is_empty() {
-            suggestions.push("Code structure looks good, no major refactoring needed");
+            suggestions.push("Code structure looks good, no major refactoring needed".to_string());
         }
 
         Ok(suggestions)
@@ -3781,15 +3792,15 @@ impl ContextAnalyzer {
 
     /// Update user preferences based on project analysis
     async fn update_user_preferences_from_project(&mut self, project_root: &str) {
-        if let Some(context) = self.project_context.get(project_root) {
+        if let Some(context) = self.project_context.get(project_root).cloned() {
             // Update coding style preferences
-            self.update_coding_style_from_project(context);
+            self.update_coding_style_from_project(&context);
 
             // Update favorite libraries
-            self.update_favorite_libraries_from_project(context);
+            self.update_favorite_libraries_from_project(&context);
 
             // Update coding habits
-            self.update_coding_habits_from_project(context);
+            self.update_coding_habits_from_project(&context);
         }
     }
 
@@ -3866,9 +3877,9 @@ impl ContextAnalyzer {
         if context.contains("fn ") && !context.contains("->") {
             // Suggest return types based on common patterns
             if context.contains("parse") || context.contains("read") {
-                suggestions.push("-> Result<T, E>".to_string()");
+                suggestions.push("-> Result<T, E>".to_string());
             } else if context.contains("get") || context.contains("find") {
-                suggestions.push("-> Option<T>".to_string()");
+                suggestions.push("-> Option<T>".to_string());
             }
         }
 
@@ -3920,9 +3931,9 @@ impl ContextAnalyzer {
 
         // Apply user coding style preferences
         if let Some(indent_pref) = self.preferences.get("preferred_indentation") {
-            if indent_pref == "spaces" {
+            if indent_pref == &1.0 {
                 // Could suggest space-based indentation
-            } else if indent_pref == "tabs" {
+            } else if indent_pref == &0.0 {
                 // Could suggest tab-based indentation
             }
         }

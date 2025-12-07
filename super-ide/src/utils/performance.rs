@@ -394,22 +394,18 @@ impl CpuMonitor {
                         let idle = parts[3];
 
                         if let Some(last_total) = self.last_cpu_time {
-                            if let Some(last_idle) = self.last_memory_info {
-                                let total_diff = total.saturating_sub(last_total) as f32;
-                                let idle_diff = idle.saturating_sub(last_idle) as f32;
+                            let total_diff = total.saturating_sub(last_total) as f32;
+                            let idle_diff = idle.saturating_sub(last_total) as f32;
 
-                                if total_diff > 0.0 {
-                                    let usage = ((total_diff - idle_diff) / total_diff) * 100.0;
-                                    self.last_cpu_time = Some(total);
-                                    self.last_memory_info = Some(idle);
-                                    return usage.max(0.0).min(100.0);
-                                }
+                            if total_diff > 0.0 {
+                                let usage = ((total_diff - idle_diff) / total_diff) * 100.0;
+                                self.last_cpu_time = Some(total);
+                                return usage.max(0.0).min(100.0);
                             }
                         }
 
                         // First measurement, store and return 0
                         self.last_cpu_time = Some(total);
-                        self.last_memory_info = Some(idle);
                         return 0.0;
                     }
                 }

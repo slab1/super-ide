@@ -165,7 +165,7 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = AiEngine::new(AiConfig::from(&config));
+        let ai_engine = AiEngine::new(AiConfig::from(&config)).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let editor = Editor::new(&config, Arc::new(ai_engine.clone())).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
@@ -497,8 +497,10 @@ impl SuperIDE {
 
     /// Analyze code for issues and suggestions
     pub async fn analyze_code(&self, code: &str, language: &str) -> IdeResult<crate::ai::AnalysisResult> {
-        let analysis = self.ai_engine.analyze_code(code, language).await?;
-        Ok(analysis)
+        match self.ai_engine.analyze_code(code, language).await {
+            Ok(analysis) => Ok(analysis),
+            Err(e) => Err(IdeError::AiEngine(e.to_string())),
+        }
     }
 
     /// Get AI code suggestions
@@ -510,8 +512,10 @@ impl SuperIDE {
             max_tokens: Some(100),
         };
 
-        let response = self.ai_engine.generate_completion(request).await?;
-        Ok(response.text)
+        match self.ai_engine.generate_completion(request).await {
+            Ok(response) => Ok(response.text),
+            Err(e) => Err(IdeError::AiEngine(e.to_string())),
+        }
     }
 }
 
