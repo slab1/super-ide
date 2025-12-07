@@ -2,10 +2,9 @@
 
 use axum::{
     extract::{WebSocketUpgrade, State},
-    routing::post,
+    routing::{get, post, put, delete},
     extract::ws::WebSocket,
     response::{IntoResponse, Html},
-    routing::get,
     Router,
     Json,
 };
@@ -18,10 +17,13 @@ use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use futures::{StreamExt, SinkExt};
 use log::info;
+use tokio::sync::RwLock;
 
 use crate::core::SuperIDE;
-use crate::api::{ApiState, create_api_router};
+use crate::api::create_api_router;
 use crate::terminal::ws_handler::TerminalWebSocketState;
+use crate::utils::file_manager::FileManager;
+use crate::utils::event_bus::EventBus;
 
 use crate::editor::{CompletionContext, CompletionItem};
 
@@ -92,37 +94,73 @@ pub enum UiEvent {
     },
 }
 
+// Unified App State
+#[derive(Clone)]
+pub struct AppState {
+    pub ide: Arc<SuperIDE>,
+    pub file_manager: Arc<RwLock<FileManager>>,
+    pub event_bus: Arc<EventBus>,
+    pub event_sender: broadcast::Sender<UiEvent>,
+}
+
 // Main UI handler
 pub struct WebUI {
-    ui_state: UiState,
-    api_state: ApiState,
+    app_state: AppState,
     server_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl WebUI {
     /// Create a new web UI instance
-    pub fn new(ide: Arc<SuperIDE>, api_state: ApiState) -> Self {
+    pub fn new(ide: Arc<SuperIDE>) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
+        let file_manager = Arc::new(RwLock::new(FileManager::default()));
+        let event_bus = ide.event_bus().clone();
         
         Self {
-            ui_state: UiState {
+            app_state: AppState {
                 ide: ide.clone(),
+                file_manager,
+                event_bus,
                 event_sender,
             },
-            api_state: api_state.clone(),
             server_task: None,
         }
     }
     
     /// Start the web server
     pub async fn start(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        // Import API handlers into the UI module scope
+        use crate::api::{load_file, save_file, create_file, delete_file, get_file_tree, search_files};
+        use crate::api::{ai_chat, get_completions, analyze_code};
+        use crate::api::{git_status, git_branches, git_commit};
+        use crate::api::{project_info, get_config, health_check};
+        
         let app = Router::new()
             // Static file serving for frontend
             .route("/", get(serve_frontend))
             .route("/health", get(health_check))
             
-            // API routes (using the new API module)
-            .nest("/", create_api_router(self.api_state.clone()))
+            // File operations
+            .route("/api/files/:path", get(load_file))
+            .route("/api/files/:path", put(save_file))
+            .route("/api/files/create", post(create_file))
+            .route("/api/files/:path", delete(delete_file))
+            .route("/api/files/tree", get(get_file_tree))
+            .route("/api/files/search", get(search_files))
+            
+            // AI endpoints
+            .route("/api/ai/chat", post(ai_chat))
+            .route("/api/ai/completions", post(get_completions))
+            .route("/api/ai/analyze", post(analyze_code))
+            
+            // Git operations
+            .route("/api/git/status", get(git_status))
+            .route("/api/git/branches", get(git_branches))
+            .route("/api/git/commit", post(git_commit))
+            
+            // Project operations
+            .route("/api/project/info", get(project_info))
+            .route("/api/project/config", get(get_config))
             
             // WebSocket endpoints
             .route("/ws", get(websocket_handler))
@@ -137,7 +175,7 @@ impl WebUI {
             .route("/api/ai/suggest", post(get_ai_suggestion))
             
             .layer(CorsLayer::new().allow_origin(Any))
-            .with_state(self.ui_state.clone());
+            .with_state(self.app_state.clone());
             
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(&addr).await?;
@@ -180,7 +218,7 @@ async fn index() -> impl IntoResponse {
 /// Terminal WebSocket handler
 async fn terminal_websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<ApiState>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
     let terminal_state = TerminalWebSocketState {
         ide: state.ide.clone(),
@@ -191,11 +229,11 @@ async fn terminal_websocket_handler(
         )),
     };
     
-    crate::terminal::ws_handler::terminal_websocket_handler(ws, terminal_state).await
+    crate::terminal::ws_handler::terminal_websocket_handler(ws, axum::extract::State(terminal_state)).await
 }
 
 /// Health check endpoint (legacy UI handler)
-async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
+async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     let ide_state = state.ide.get_state().await;
     let ai_provider_result = state.ide.ai_engine().ai_provider().await;
     let ai_provider = ai_provider_result.unwrap_or_else(|_| "local".to_string());
@@ -209,7 +247,7 @@ async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
 }
 
 /// List files in workspace
-async fn list_files(State(state): State<UiState>) -> impl IntoResponse {
+async fn list_files(State(state): State<AppState>) -> impl IntoResponse {
     let workspace_path = state.ide.config().read().await.workspace_dir();
     
     match std::fs::read_dir(workspace_path) {
@@ -248,7 +286,7 @@ async fn list_files(State(state): State<UiState>) -> impl IntoResponse {
 
 /// Open a file
 async fn open_file(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     let path_clone = path.clone();
@@ -282,7 +320,7 @@ async fn open_file(
 
 /// Save document
 async fn save_document(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Path(document_id): Path<String>,
 ) -> impl IntoResponse {
     let editor = state.ide.editor();
@@ -310,7 +348,7 @@ async fn save_document(
 
 /// Get auto-completion suggestions
 async fn get_completion(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Json(request): Json<CompletionRequest>,
 ) -> impl IntoResponse {
     match state.ide.get_code_completions(&request.document_id, (request.cursor_position.0, request.cursor_position.1), &request.text_before).await {
@@ -325,7 +363,7 @@ async fn get_completion(
 
 /// Analyze code using AI
 async fn analyze_code(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Json(payload): Json<CodeAnalysisRequest>,
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
@@ -353,7 +391,7 @@ async fn analyze_code(
 
 /// Get AI suggestion
 async fn get_ai_suggestion(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Json(payload): Json<AiSuggestionRequest>,
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
@@ -386,7 +424,7 @@ async fn get_ai_suggestion(
 /// WebSocket handler for real-time features
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<UiState>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| websocket_connection(socket, state))
 }
@@ -394,7 +432,7 @@ async fn websocket_handler(
 /// WebSocket connection handler
 async fn websocket_connection(
     socket: WebSocket,
-    state: UiState,
+    state: AppState,
 ) {
     println!("🔗 New WebSocket connection established");
 
@@ -522,7 +560,7 @@ pub enum ClientMessage {
 }
 
 // Handle client messages
-async fn handle_client_message(message: ClientMessage, state: &UiState) {
+async fn handle_client_message(message: ClientMessage, state: &AppState) {
     match message {
         ClientMessage::RequestCompletion { document_id, cursor_position, text_context } => {
             let context = CompletionContext {

@@ -20,14 +20,13 @@ use tokio::sync::RwLock;
 use log::{info, warn, error};
 use chrono::Utc;
 
-use crate::core::SuperIDE;
-use crate::utils::file_manager::{FileManager, FileManagerError, DirEntry};
+use crate::utils::file_manager::{FileManager, DirEntry};
 use crate::utils::event_bus::EventBus;
 
 // API State
 #[derive(Clone)]
 pub struct ApiState {
-    pub ide: Arc<SuperIDE>,
+    pub ide: Arc<super::core::SuperIDE>,
     pub file_manager: Arc<RwLock<FileManager>>,
     pub event_bus: Arc<EventBus>,
 }
@@ -125,39 +124,39 @@ where
 }
 
 // Router creation
-pub fn create_api_router(state: ApiState) -> Router {
+pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::AppState> {
     Router::new()
         // File operations
-        .route("/api/files/:path", get(load_file))
-        .route("/api/files/:path", put(save_file))
-        .route("/api/files/create", post(create_file))
-        .route("/api/files/:path", delete(delete_file))
-        .route("/api/files/tree", get(get_file_tree))
-        .route("/api/files/search", get(search_files))
+        .route("/files/:path", get(load_file))
+        .route("/files/:path", put(save_file))
+        .route("/files/create", post(create_file))
+        .route("/files/:path", delete(delete_file))
+        .route("/files/tree", get(get_file_tree))
+        .route("/files/search", get(search_files))
         
         // AI endpoints
-        .route("/api/ai/chat", post(ai_chat))
-        .route("/api/ai/completions", post(get_completions))
-        .route("/api/ai/analyze", post(analyze_code))
+        .route("/ai/chat", post(ai_chat))
+        .route("/ai/completions", post(get_completions))
+        .route("/ai/analyze", post(analyze_code))
         
         // Git operations
-        .route("/api/git/status", get(git_status))
-        .route("/api/git/branches", get(git_branches))
-        .route("/api/git/commit", post(git_commit))
+        .route("/git/status", get(git_status))
+        .route("/git/branches", get(git_branches))
+        .route("/git/commit", post(git_commit))
         
         // Project operations
-        .route("/api/project/info", get(project_info))
-        .route("/api/project/config", get(get_config))
-        .route("/api/health", get(health_check))
+        .route("/project/info", get(project_info))
+        .route("/project/config", get(get_config))
+        .route("/health", get(health_check))
         
-        .with_state(state)
+        .with_state(app_state)
 }
 
 // File Operations Handlers
 
 /// Load file content
-async fn load_file(
-    State(state): State<ApiState>,
+pub async fn load_file(
+    State(state): State<super::ui::AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
@@ -176,8 +175,8 @@ async fn load_file(
 }
 
 /// Save file content
-async fn save_file(
-    State(state): State<ApiState>,
+pub async fn save_file(
+    State(state): State<super::ui::AppState>,
     Path(path): Path<String>,
     Json(request): Json<FileContentRequest>,
 ) -> impl IntoResponse {
@@ -189,7 +188,7 @@ async fn save_file(
             info!("Successfully saved file: {}", path_buf.display());
             
             // Notify other components about file change
-            let _ = state.event_bus.send(crate::utils::event_bus::IdeEvent::FileChanged {
+            let _ = state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
                 path: path_buf.to_string_lossy().to_string(),
                 event_type: crate::utils::event_bus::FileEventType::Modified,
             });
@@ -204,8 +203,8 @@ async fn save_file(
 }
 
 /// Create new file or directory
-async fn create_file(
-    State(state): State<ApiState>,
+pub async fn create_file(
+    State(state): State<super::ui::AppState>,
     Json(request): Json<FileCreateRequest>,
 ) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
@@ -222,7 +221,7 @@ async fn create_file(
                 path_buf.display());
                 
             // Notify about file creation
-            let _ = state.event_bus.send(crate::utils::event_bus::IdeEvent::FileChanged {
+            let _ = state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
                 path: path_buf.to_string_lossy().to_string(),
                 event_type: crate::utils::event_bus::FileEventType::Created,
             });
@@ -237,8 +236,8 @@ async fn create_file(
 }
 
 /// Delete file or directory
-async fn delete_file(
-    State(state): State<ApiState>,
+pub async fn delete_file(
+    State(state): State<super::ui::AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
@@ -253,7 +252,7 @@ async fn delete_file(
             info!("Successfully deleted: {}", path_buf.display());
             
             // Notify about file deletion
-            let _ = state.event_bus.send(crate::utils::event_bus::IdeEvent::FileChanged {
+            let _ = state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
                 path: path_buf.to_string_lossy().to_string(),
                 event_type: crate::utils::event_bus::FileEventType::Deleted,
             });
@@ -268,7 +267,7 @@ async fn delete_file(
 }
 
 /// Get file tree structure
-async fn get_file_tree(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn get_file_tree(State(state): State<super::ui::AppState>) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
     let workspace_path = state.ide.config().read().await.workspace_dir();
     
@@ -289,13 +288,13 @@ async fn get_file_tree(State(state): State<ApiState>) -> impl IntoResponse {
 }
 
 /// Search files by pattern
-async fn search_files(
-    State(state): State<ApiState>,
+pub async fn search_files(
+    State(state): State<super::ui::AppState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
     let pattern = params.get("pattern").unwrap_or(&"".to_string()).clone();
-    let root = params.get("root").unwrap_or(&".".to_string());
+    let root = params.get("root").unwrap_or(&".".to_string()).clone();
     
     if pattern.is_empty() {
         return ApiResponse::error("Search pattern is required".to_string());
@@ -324,8 +323,8 @@ async fn search_files(
 // AI Handlers
 
 /// AI chat endpoint
-async fn ai_chat(
-    State(state): State<ApiState>,
+pub async fn ai_chat(
+    State(state): State<super::ui::AppState>,
     Json(request): Json<AIChatRequest>,
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
@@ -333,9 +332,9 @@ async fn ai_chat(
     // Create AI completion request
     let completion_request = crate::ai::CompletionRequest {
         prompt: request.message,
-        context: request.context.map(|ctx| ctx.file_content.unwrap_or_default()).unwrap_or_default(),
-        language: request.context.and_then(|ctx| ctx.language).unwrap_or_else(|| "rust".to_string()),
-        max_tokens: request.settings.and_then(|s| s.max_tokens.map(|t| t as usize)),
+        context: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
+        language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
+        max_tokens: request.settings.and_then(|s| s.max_tokens),
     };
     
     match ai_engine.generate_completion(completion_request).await {
@@ -351,8 +350,8 @@ async fn ai_chat(
 }
 
 /// Get code completions
-async fn get_completions(
-    State(state): State<ApiState>,
+pub async fn get_completions(
+    State(state): State<super::ui::AppState>,
     Json(request): Json<CodeCompletionRequest>,
 ) -> impl IntoResponse {
     let editor = state.ide.editor();
@@ -375,8 +374,8 @@ async fn get_completions(
 }
 
 /// Analyze code using AI
-async fn analyze_code(
-    State(state): State<ApiState>,
+pub async fn analyze_code(
+    State(state): State<super::ui::AppState>,
     Json(request): Json<CodeCompletionRequest>,
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
@@ -396,8 +395,8 @@ async fn analyze_code(
 // Git Handlers
 
 /// Get git status
-async fn git_status(
-    State(state): State<ApiState>,
+pub async fn git_status(
+    State(state): State<super::ui::AppState>,
     Query(params): Query<GitStatusRequest>,
 ) -> impl IntoResponse {
     let file_manager = state.file_manager.read().await;
@@ -420,7 +419,7 @@ async fn git_status(
 }
 
 /// Get git branches
-async fn git_branches(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn git_branches(State(state): State<super::ui::AppState>) -> impl IntoResponse {
     let workspace_path = state.ide.config().read().await.workspace_dir();
     
     match tokio::process::Command::new("git")
@@ -459,8 +458,8 @@ async fn git_branches(State(state): State<ApiState>) -> impl IntoResponse {
 }
 
 /// Commit changes
-async fn git_commit(
-    State(state): State<ApiState>,
+pub async fn git_commit(
+    State(state): State<super::ui::AppState>,
     Json(request): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let workspace_path = state.ide.config().read().await.workspace_dir();
@@ -507,7 +506,7 @@ async fn git_commit(
 // Project Handlers
 
 /// Get project information
-async fn project_info(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn project_info(State(state): State<super::ui::AppState>) -> impl IntoResponse {
     let config = state.ide.config().read().await;
     let workspace_path = config.workspace_dir();
     
@@ -527,13 +526,13 @@ async fn project_info(State(state): State<ApiState>) -> impl IntoResponse {
 }
 
 /// Get configuration
-async fn get_config(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn get_config(State(state): State<super::ui::AppState>) -> impl IntoResponse {
     let config = state.ide.config().read().await;
     
     let config_info = ConfigInfo {
         workspace_path: config.workspace_dir().to_string_lossy().to_string(),
         auto_save_interval: config.ide.auto_save_interval,
-        font_size: config.editor.font_size,
+        font_size: config.editor.font_size as u16,
         theme_name: config.theme.name.clone(),
         ai_provider: format!("{:?}", config.ai.provider),
         enable_ai: config.ai.enable_local_inference,
@@ -543,14 +542,14 @@ async fn get_config(State(state): State<ApiState>) -> impl IntoResponse {
 }
 
 /// Health check
-async fn health_check(State(state): State<ApiState>) -> impl IntoResponse {
+pub async fn health_check(State(state): State<super::ui::AppState>) -> impl IntoResponse {
     let ide_state = state.ide.get_state().await;
     
     ApiResponse::success(HealthStatus {
         status: "healthy".to_string(),
         ide_running: true,
         documents_open: ide_state.active_tabs.len(),
-        ai_enabled: state.ide.ai_engine().is_available().await,
+        ai_enabled: state.ide.ai_engine().ai_provider().await.unwrap_or_else(|_| "local".to_string()) != "local",
         timestamp: Utc::now().to_rfc3339(),
     })
 }

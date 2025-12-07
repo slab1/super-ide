@@ -186,6 +186,8 @@ impl SuperIDE {
             working_directory: None,
             environment: std::env::vars().collect(),
             pty_size: Some((80, 24)),
+            max_output_lines: 1000,
+            command_timeout: tokio::time::Duration::from_secs(30),
         };
         let terminal_manager = Arc::new(TerminalManager::new(terminal_config));
         
@@ -365,7 +367,7 @@ impl SuperIDE {
         let session_id = self.create_terminal(title).await?;
         self.start_terminal(&session_id).await?;
 
-        let executor = super::terminal::CommandExecutor::default();
+        let mut executor = super::terminal::CommandExecutor::default();
         let result = executor.execute(command).await?;
 
         // Clean up the session

@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
     };
     
     // Start web UI with API integration
-    let mut web_ui = WebUI::new(Arc::new(ide), api_state);
+    let mut web_ui = WebUI::new(Arc::new(ide));
     if let Err(e) = web_ui.start(args.port).await {
         eprintln!("Error starting web UI: {}", e);
         return Ok(());
@@ -661,7 +661,7 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
     };
     
     // Start web UI
-    let mut web_ui = WebUI::new(Arc::new(ide), api_state);
+    let mut web_ui = WebUI::new(Arc::new(ide));
     if let Err(e) = web_ui.start(port).await {
         eprintln!("Error starting web UI: {}", e);
         return Ok(());

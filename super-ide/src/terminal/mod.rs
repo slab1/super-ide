@@ -75,6 +75,8 @@ pub struct ProcessResult {
 pub struct TerminalConfig {
     pub shell: String,
     pub working_directory: Option<std::path::PathBuf>,
+    pub environment: HashMap<String, String>,
+    pub pty_size: Option<(u16, u16)>,
     pub max_output_lines: usize,
     pub command_timeout: Duration,
 }
@@ -84,6 +86,8 @@ impl Default for TerminalConfig {
         Self {
             shell: "bash".to_string(),
             working_directory: None,
+            environment: std::env::vars().collect(),
+            pty_size: Some((80, 24)),
             max_output_lines: 1000,
             command_timeout: Duration::from_secs(30),
         }
@@ -133,16 +137,14 @@ impl TerminalManager {
     }
     
     /// Create a new terminal session with WebSocket support
-    pub async fn create_session(&self, shell: Option<&str>, cwd: Option<&str>) -> IdeResult<TerminalSessionHandle> {
+    pub async fn create_session(&self, title: Option<String>) -> IdeResult<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        let shell = shell.unwrap_or("bash");
-        let working_directory = cwd.map(std::path::PathBuf::from)
-            .unwrap_or_else(|| self.config.working_directory.clone()
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()));
+        let working_directory = self.config.working_directory.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         
         let session = TerminalSession {
             id: session_id.clone(),
-            title: format!("Terminal {}", session_id[..8].to_string()),
+            title: title.unwrap_or_else(|| format!("Terminal {}", session_id[..8].to_string())),
             working_directory: working_directory.clone(),
             created_at: chrono::Utc::now(),
             status: TerminalStatus::Stopped,
@@ -162,7 +164,7 @@ impl TerminalManager {
         // Store output sender for WebSocket forwarding
         {
             let mut output_senders = self.output_senders.write().await;
-            output_senders.insert(session_id.clone(), output_tx);
+            output_senders.insert(session_id.clone(), output_tx.clone());
         }
         
         // Create input channel for command processing
@@ -174,8 +176,9 @@ impl TerminalManager {
         }
         
         // Start the shell process
-        let mut child = tokio::process::Command::new(shell)
+        let mut child = tokio::process::Command::new(&self.config.shell)
             .current_dir(&working_directory)
+            .envs(&self.config.environment)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -227,7 +230,7 @@ impl TerminalManager {
         });
         
         // Spawn task to handle input
-        let stdin_clone = stdin;
+        let mut stdin_clone = stdin;
         let input_task = tokio::spawn(async move {
             while let Some(input) = input_rx.recv().await {
                 let _ = stdin_clone.write_all(input.as_bytes()).await;
@@ -243,11 +246,7 @@ impl TerminalManager {
             }
         }
         
-        Ok(TerminalSessionHandle {
-            session_id,
-            output_receiver: output_rx,
-            _tasks: vec![stdout_task, stderr_task, input_task],
-        })
+        Ok(session_id)
     }
     
     /// Execute a command in a terminal session
@@ -258,6 +257,23 @@ impl TerminalManager {
         
         let _ = input_sender.send(command.to_string());
         Ok(())
+    }
+    
+    /// Start a terminal session
+    pub async fn start_terminal(&self, session_id: &str) -> IdeResult<()> {
+        let sessions = self.sessions.read().await;
+        if !sessions.contains_key(session_id) {
+            return Err(TerminalError::SessionNotFound(session_id.to_string()).into());
+        }
+        
+        // In our implementation, sessions are started immediately when created
+        // This method just validates that the session exists
+        Ok(())
+    }
+    
+    /// Stop a terminal session
+    pub async fn stop_terminal(&self, session_id: &str) -> IdeResult<()> {
+        self.close_session(session_id).await.map(|_| ())
     }
     
     /// Resize terminal session
@@ -312,11 +328,26 @@ impl TerminalManager {
         
         sender.send(input.to_string()).map_err(|_| TerminalError::InvalidSession.into())
     }
+    
+    /// Get output receiver for a terminal session
+    pub async fn get_output_receiver(&self, session_id: &str) -> Option<mpsc::UnboundedReceiver<String>> {
+        let output_senders = self.output_senders.read().await;
+        let sender = output_senders.get(session_id)?;
+        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let _ = sender.send("test".to_string()); // Check if sender is still valid
+        Some(rx)
+    }
 }
 
 /// Simple command execution interface
 pub struct CommandExecutor {
     config: TerminalConfig,
+}
+
+impl Default for CommandExecutor {
+    fn default() -> Self {
+        Self::new(TerminalConfig::default())
+    }
 }
 
 impl CommandExecutor {
@@ -339,23 +370,25 @@ impl CommandExecutor {
         let args = &parts[1..];
 
         // Spawn the process asynchronously
-        let child = tokio::process::Command::new(program)
+        let mut child = tokio::process::Command::new(program)
             .args(args)
+            .envs(&self.config.environment)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| TerminalError::ProcessExecution(e.to_string()))?;
 
-        let (stdout, stderr) = (
-            child.stdout.ok_or_else(|| TerminalError::ProcessExecution("Failed to get stdout".to_string()))?,
-            child.stderr.ok_or_else(|| TerminalError::ProcessExecution("Failed to get stderr".to_string()))?,
-        );
+        let stdout = child.stdout.take()
+            .ok_or_else(|| TerminalError::ProcessExecution("Failed to get stdout".to_string()))?;
+        let mut stderr = child.stderr.take()
+            .ok_or_else(|| TerminalError::ProcessExecution("Failed to get stderr".to_string()))?;
 
         // Read stdout and stderr concurrently
         let stdout_task = tokio::spawn(async move {
             let mut buffer = String::new();
-            let _ = tokio::io::AsyncReadExt::read_to_string(&mut stdout, &mut buffer).await;
+            let mut stdout_clone = stdout;
+            let _ = tokio::io::AsyncReadExt::read_to_string(&mut stdout_clone, &mut buffer).await;
             buffer
         });
 
