@@ -478,7 +478,7 @@ impl SuperIDE {
     }
 
     /// Get code completions for the current context
-    pub async fn get_code_completions(&self, document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
+    pub async fn get_code_completions(&self, _document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
         let editor = self.editor.lock().await;
 
         let context = crate::editor::CompletionContext {

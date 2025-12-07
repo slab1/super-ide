@@ -51,7 +51,7 @@ struct CpuMonitor {
 /// Memory usage monitor
 #[derive(Clone)]
 struct MemoryMonitor {
-    last_memory_info: Option<u64>, // Simplified: just store raw counter
+    _last_memory_info: Option<u64>, // Simplified: just store raw counter
 }
 
 impl PerformanceMonitor {
@@ -419,9 +419,9 @@ impl CpuMonitor {
 
 // Memory Monitor Implementation
 impl MemoryMonitor {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Self {
-            last_memory_info: None,
+            _last_memory_info: None,
         }
     }
 

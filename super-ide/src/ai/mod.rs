@@ -19,9 +19,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 use tree_sitter::{Language, Parser, Tree, Node};
-use regex::Regex;
-use std::path::PathBuf;
-use std::ffi::OsStr;
 
 /// AI Provider abstraction for multiple AI services
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,10 +155,7 @@ impl AiProviderClient for OpenAiProvider {
             return Err(anyhow::anyhow!("OpenAI API error: {}", response.status()));
         }
 
-        let response_json: serde_json::Value = response.json().await?;
-        let analysis_text = response_json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or("{}");
+        let _response_json: serde_json::Value = response.json().await?;
 
         // Parse the analysis response (simplified)
         let issues = vec![CodeIssue {
@@ -346,7 +340,7 @@ impl LocalProvider {
 
 #[async_trait::async_trait]
 impl AiProviderClient for LocalProvider {
-    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+    async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse> {
         // Placeholder - would integrate with local models like candle
         Ok(CompletionResponse {
             text: "// Local model completion not implemented".to_string(),
@@ -895,7 +889,7 @@ pub struct AiEngine {
     provider_manager: Arc<RwLock<AiProviderManager>>,
     learning_data: Arc<RwLock<HashMap<String, LearningData>>>,
     semantic_analyzer: Arc<RwLock<SemanticAnalyzer>>,
-    pattern_recognizer: Arc<RwLock<PatternRecognizer>>,
+    _pattern_recognizer: Arc<RwLock<PatternRecognizer>>,
     context_analyzer: Arc<RwLock<ContextAnalyzer>>,
     security_analyzer: Arc<RwLock<SecurityAnalyzer>>,
     performance_analyzer: Arc<RwLock<PerformanceAnalyzer>>,
@@ -1063,9 +1057,9 @@ pub struct FieldInfo {
 /// Advanced Pattern Recognizer for intelligent code analysis
 #[derive(Debug)]
 pub struct PatternRecognizer {
-    code_patterns: HashMap<String, CodePattern>,
-    anti_patterns: HashMap<String, AntiPattern>,
-    user_patterns: HashMap<String, Vec<String>>,
+    _code_patterns: HashMap<String, CodePattern>,
+    _anti_patterns: HashMap<String, AntiPattern>,
+    _user_patterns: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1118,7 +1112,7 @@ pub struct PerformanceMetrics {
 pub struct ContextAnalyzer {
     project_context: HashMap<String, ProjectContext>,
     user_profile: UserProfile,
-    coding_style: CodingStyle,
+    _coding_style: CodingStyle,
     preferences: HashMap<String, f32>,
 }
 
@@ -1146,7 +1140,7 @@ pub struct UserProfile {
 pub struct SecurityAnalyzer {
     vulnerability_patterns: HashMap<String, Vulnerability>,
     security_rules: Vec<SecurityRule>,
-    threat_models: HashMap<String, ThreatModel>,
+    _threat_models: HashMap<String, ThreatModel>,
 }
 
 #[derive(Debug, Clone)]
@@ -1191,9 +1185,9 @@ pub struct ThreatModel {
 /// Performance Analyzer for optimization insights
 #[derive(Debug)]
 pub struct PerformanceAnalyzer {
-    performance_patterns: HashMap<String, PerformanceIssue>,
-    optimization_rules: Vec<OptimizationRule>,
-    benchmark_data: HashMap<String, PerformanceMetrics>,
+    _performance_patterns: HashMap<String, PerformanceIssue>,
+    _optimization_rules: Vec<OptimizationRule>,
+    _benchmark_data: HashMap<String, PerformanceMetrics>,
 }
 
 #[derive(Debug, Clone)]
@@ -1554,7 +1548,7 @@ impl AiEngine {
             provider_manager: Arc::new(RwLock::new(provider_manager)),
             learning_data: Arc::new(RwLock::new(HashMap::new())),
             semantic_analyzer: Arc::new(RwLock::new(SemanticAnalyzer::new())),
-            pattern_recognizer: Arc::new(RwLock::new(PatternRecognizer::new())),
+            _pattern_recognizer: Arc::new(RwLock::new(PatternRecognizer::new())),
             context_analyzer: Arc::new(RwLock::new(ContextAnalyzer::new())),
             security_analyzer: Arc::new(RwLock::new(SecurityAnalyzer::new())),
             performance_analyzer: Arc::new(RwLock::new(PerformanceAnalyzer::new())),
@@ -1678,7 +1672,7 @@ impl AiEngine {
     }
 
     /// Generate Rust code block completions
-    async fn generate_rust_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_rust_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
 
         if context.contains("fn ") && !context.contains("{") {
@@ -1712,7 +1706,7 @@ impl AiEngine {
     }
 
     /// Generate JavaScript/TypeScript code block completions
-    async fn generate_js_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_js_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
 
         if context.contains("function ") && !context.contains("{") {
@@ -1735,7 +1729,7 @@ impl AiEngine {
     }
 
     /// Generate Python code block completions
-    async fn generate_python_block_completions(&self, context: &str, tree: &SyntaxTree) -> Vec<String> {
+    async fn generate_python_block_completions(&self, context: &str, _tree: &SyntaxTree) -> Vec<String> {
         let mut completions = Vec::new();
 
         if context.contains("def ") && !context.contains(":") {
@@ -2155,7 +2149,7 @@ impl AiEngine {
     }
 
     /// Calculate code complexity score
-    fn calculate_complexity_score(&self, code: &str, language: &str) -> f32 {
+    fn calculate_complexity_score(&self, code: &str, _language: &str) -> f32 {
         let lines = code.lines().count();
         let functions = code.matches("fn ").count();
         let conditionals = code.matches("if ").count() + code.matches("match ").count();
@@ -2585,7 +2579,7 @@ impl AiEngine {
     }
 
     /// Generate mock Rust completions
-    fn mock_rust_completion(&self, context: &str) -> Vec<String> {
+    fn _mock_rust_completion(&self, context: &str) -> Vec<String> {
         if context.contains("fn ") {
             vec![
                 "fn function_name() -> Result<T, E> {\n    // Implementation\n}".to_string(),
@@ -2605,7 +2599,7 @@ impl AiEngine {
     }
 
     /// Generate mock JavaScript/TypeScript completions
-    fn mock_js_completion(&self, context: &str) -> Vec<String> {
+    fn _mock_js_completion(&self, context: &str) -> Vec<String> {
         if context.contains("function ") {
             vec![
                 "function functionName(param) {\n    // Implementation\n}".to_string(),
@@ -2621,7 +2615,7 @@ impl AiEngine {
     }
 
     /// Generate mock Python completions
-    fn mock_python_completion(&self, context: &str) -> Vec<String> {
+    fn _mock_python_completion(&self, context: &str) -> Vec<String> {
         if context.contains("def ") {
             vec![
                 "def function_name(param):\n    # Implementation\n    pass".to_string(),
@@ -2754,7 +2748,7 @@ impl AiEngine {
 
     /// Analyze security vulnerabilities
     pub async fn analyze_security_threats(&self, code: &str, language: &str) -> Result<Vec<String>> {
-        let analyzer = self.security_analyzer.read().await;
+        let _analyzer = self.security_analyzer.read().await;
         let mut threats = Vec::new();
 
         // Basic security analysis
@@ -2806,7 +2800,7 @@ impl AiEngine {
 
     /// Generate refactoring suggestions
     pub async fn suggest_refactoring(&self, code: &str, language: &str) -> Result<Vec<String>> {
-        let refactoring = self.refactoring_engine.read().await;
+        let _refactoring = self.refactoring_engine.read().await;
         let mut suggestions = Vec::new();
 
         if language == "rust" {
@@ -3095,8 +3089,8 @@ impl SemanticAnalyzer {
     /// Extract symbol information from AST node
     fn extract_symbol_info(&self, node: &Node, source: &str, symbol_type: SymbolType) -> Option<SymbolInfo> {
         let name = self.extract_node_text(node, source, "identifier")?;
-        let line = node.start_position().row as u32;
-        let column = node.start_position().column as u32;
+        let _line = node.start_position().row as u32;
+        let _column = node.start_position().column as u32;
 
         let data_type = self.extract_type_annotation(node, source);
         let visibility = Visibility::Private; // Default, TODO: Extract actual visibility
@@ -3288,9 +3282,9 @@ impl SemanticAnalyzer {
 impl PatternRecognizer {
     pub fn new() -> Self {
         Self {
-            code_patterns: HashMap::new(),
-            anti_patterns: HashMap::new(),
-            user_patterns: HashMap::new(),
+            _code_patterns: HashMap::new(),
+            _anti_patterns: HashMap::new(),
+            _user_patterns: HashMap::new(),
         }
     }
 }
@@ -3311,7 +3305,7 @@ impl ContextAnalyzer {
                 coding_habits: HashMap::new(),
                 error_patterns: Vec::new(),
             },
-            coding_style: CodingStyle {
+            _coding_style: CodingStyle {
                 naming_convention: "snake_case".to_string(),
                 indentation: "spaces".to_string(),
                 line_length: 80,
@@ -3926,7 +3920,7 @@ impl ContextAnalyzer {
     }
 
     /// Get suggestions based on user preferences
-    fn get_user_preference_suggestions(&self, language: &str, context: &str) -> Vec<String> {
+    fn get_user_preference_suggestions(&self, _language: &str, context: &str) -> Vec<String> {
         let mut suggestions = Vec::new();
 
         // Apply user coding style preferences
@@ -4009,7 +4003,7 @@ impl SecurityAnalyzer {
         let mut analyzer = Self {
             vulnerability_patterns: HashMap::new(),
             security_rules: Vec::new(),
-            threat_models: HashMap::new(),
+            _threat_models: HashMap::new(),
         };
 
         analyzer.initialize_vulnerability_patterns();
@@ -4459,9 +4453,9 @@ impl SecurityAnalyzer {
 impl PerformanceAnalyzer {
     pub fn new() -> Self {
         Self {
-            performance_patterns: HashMap::new(),
-            optimization_rules: Vec::new(),
-            benchmark_data: HashMap::new(),
+            _performance_patterns: HashMap::new(),
+            _optimization_rules: Vec::new(),
+            _benchmark_data: HashMap::new(),
         }
     }
 }
@@ -4906,7 +4900,7 @@ impl RefactoringEngine {
     }
 
     /// Apply transformation refactoring
-    fn apply_transformation(&self, code: &str, suggestion: &RefactoringSuggestion) -> Result<String> {
+    fn apply_transformation(&self, code: &str, _suggestion: &RefactoringSuggestion) -> Result<String> {
         // Find the appropriate transformation rule
         for rule in &self.transformation_rules {
             if let Ok(regex) = regex::Regex::new(&rule.from_pattern) {
