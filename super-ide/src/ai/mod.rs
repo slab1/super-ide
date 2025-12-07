@@ -15,8 +15,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{PathBuf, Path};
-use std::ffi::OsStr;
+// Note: PathBuf, Path, OsStr imports reserved for future file operations
+// use std::path::{PathBuf, Path};
+// use std::ffi::OsStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -1814,7 +1815,7 @@ impl AiEngine {
 
         // Analyze syntax tree to understand context better
         let has_function_def = tree.functions.len() > 0;
-        let has_class_def = tree.classes.len() > 0;
+        let _has_class_def = tree.classes.len() > 0;
         let import_count = tree.imports.len();
 
         if context.contains("function ") && !context.contains("{") {
@@ -1856,7 +1857,7 @@ impl AiEngine {
         let mut completions = Vec::new();
 
         // Analyze syntax tree for better context-aware completions
-        let has_class_def = tree.classes.len() > 0;
+        let _has_class_def = tree.classes.len() > 0;
         let has_function_def = tree.functions.len() > 0;
         let imports: Vec<&String> = tree.imports.iter().map(|i| &i.module_path).collect();
 
@@ -4722,11 +4723,11 @@ impl SecurityAnalyzer {
     }
 
     /// Get security threat analysis based on threat models
-    pub fn get_threat_analysis(&self, code: &str, language: &str) -> Vec<String> {
+    pub fn get_threat_analysis(&self, code: &str, _language: &str) -> Vec<String> {
         let mut threats = Vec::new();
 
         // Check code against known threat models
-        for (model_id, threat_model) in &self._threat_models {
+        for (_model_id, threat_model) in &self._threat_models {
             let mut threat_detected = false;
             let mut relevant_lines = Vec::new();
 
@@ -4996,7 +4997,7 @@ impl PerformanceAnalyzer {
     }
 
     /// Get performance insights based on patterns and benchmarks
-    pub fn get_performance_insights(&self, code: &str, language: &str) -> Vec<String> {
+    pub fn get_performance_insights(&self, code: &str, _language: &str) -> Vec<String> {
         let mut insights = Vec::new();
 
         // Check for performance patterns

@@ -114,6 +114,8 @@ impl PerformanceMonitor {
                 
                 if let Some(memory_monitor) = &mut memory_monitor_clone {
                     metrics.memory_usage_mb = memory_monitor.get_memory_usage();
+                    // Track memory trend for anomaly detection
+                    let _trend = memory_monitor.analyze_memory_trend();
                 }
                 
                 // Update operational metrics
@@ -456,7 +458,7 @@ impl MemoryMonitor {
     }
 
     /// Analyze memory usage trend over time
-    fn analyze_memory_trend(&self) -> f32 {
+    pub fn analyze_memory_trend(&self) -> f32 {
         if let Some(last_memory) = self._last_memory_info {
             // This is a simplified trend analysis
             // In a real implementation, we'd track multiple data points
