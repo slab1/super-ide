@@ -40,6 +40,18 @@ pub struct FileWatcher {
 }
 
 impl FileWatcher {
+    /// Get the event sender for this watcher
+    pub fn event_sender(&self) -> &mpsc::UnboundedSender<FileEvent> {
+        &self.event_sender
+    }
+
+    /// Get the underlying watcher
+    pub fn watcher(&self) -> &RecommendedWatcher {
+        &self.watcher
+    }
+}
+
+impl FileWatcher {
     pub fn new<P: AsRef<Path>>(
         path: P,
         event_sender: mpsc::UnboundedSender<FileEvent>,
@@ -88,12 +100,13 @@ impl FileWatcher {
 #[derive(Debug)]
 pub struct FileManager {
     watchers: Vec<FileWatcher>,
+    event_sender: mpsc::UnboundedSender<FileEvent>,
 }
 
 impl FileManager {
     pub async fn new() -> Result<Self, FileManagerError> {
-        let (_event_sender, event_receiver) = mpsc::unbounded_channel();
-        
+        let (event_sender, event_receiver) = mpsc::unbounded_channel();
+
         // Start background task to handle file events
         tokio::spawn(async move {
             let mut receiver = event_receiver;
@@ -114,9 +127,10 @@ impl FileManager {
                 }
             }
         });
-        
+
         Ok(Self {
             watchers: Vec::new(),
+            event_sender,
         })
     }
     
@@ -231,12 +245,11 @@ impl FileManager {
     
     /// Watch a directory for changes
     pub async fn watch_directory(&mut self, path: &Path) -> Result<(), FileManagerError> {
-        let (event_sender, _) = mpsc::unbounded_channel();
-        let watcher = FileWatcher::new(path, event_sender)?;
-        
+        let watcher = FileWatcher::new(path, self.event_sender.clone())?;
+
         self.watchers.push(watcher);
         println!("👁️ Watching directory: {}", path.display());
-        
+
         Ok(())
     }
     

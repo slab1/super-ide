@@ -219,7 +219,7 @@ impl PerformanceMonitor {
         {
             self.cpu_monitor = Some(CpuMonitor::new());
         }
-        
+
         // Initialize memory monitor
         #[cfg(feature = "sysinfo")]
         {
@@ -298,19 +298,27 @@ pub struct OperationMonitor {
 impl OperationMonitor {
     /// Finish monitoring and record the operation
     pub async fn finish(self, operation_type: OperationType) {
-        let _duration = self.start_time.elapsed();
-        
+        let duration = self.start_time.elapsed();
+
+        // Record the operation duration in metrics
+        let mut metrics = self.metrics.write().await;
+
         match operation_type {
             OperationType::AiRequest => {
-                // This method should increment counters, not metrics
-                // The current implementation doesn't have access to counters
-                // This would need to be implemented properly
+                // Record AI response time
+                metrics.response_time_ms.push_back(duration.as_secs_f32() * 1000.0);
+                // Keep only last 100 response times
+                while metrics.response_time_ms.len() > 100 {
+                    metrics.response_time_ms.pop_front();
+                }
             }
             OperationType::FileOperation => {
-                // Same issue - this needs proper counter access
+                // Could track file operation times, but for now just acknowledge
+                metrics.file_operations_per_second += 1;
             }
             OperationType::NetworkRequest => {
-                // Same issue - this needs proper counter access
+                // Could track network request times
+                metrics.network_requests += 1;
             }
         }
     }
@@ -362,12 +370,12 @@ pub struct PerformanceIndicators {
 
 // CPU Monitor Implementation
 impl CpuMonitor {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             last_cpu_time: None,
         }
     }
-    
+
     fn get_cpu_usage(&mut self) -> f32 {
         #[cfg(target_os = "linux")]
         {
@@ -380,17 +388,34 @@ impl CpuMonitor {
                         .take(5)
                         .filter_map(|s| s.parse().ok())
                         .collect();
-                    
+
                     if parts.len() >= 5 {
-                        let total = parts.iter().sum::<u64>() as f32;
-                        let idle = parts[3] as f32;
-                        let usage = ((total - idle) / total) * 100.0;
-                        return usage.max(0.0).min(100.0);
+                        let total: u64 = parts.iter().sum();
+                        let idle = parts[3];
+
+                        if let Some(last_total) = self.last_cpu_time {
+                            if let Some(last_idle) = self.last_memory_info {
+                                let total_diff = total.saturating_sub(last_total) as f32;
+                                let idle_diff = idle.saturating_sub(last_idle) as f32;
+
+                                if total_diff > 0.0 {
+                                    let usage = ((total_diff - idle_diff) / total_diff) * 100.0;
+                                    self.last_cpu_time = Some(total);
+                                    self.last_memory_info = Some(idle);
+                                    return usage.max(0.0).min(100.0);
+                                }
+                            }
+                        }
+
+                        // First measurement, store and return 0
+                        self.last_cpu_time = Some(total);
+                        self.last_memory_info = Some(idle);
+                        return 0.0;
                     }
                 }
             }
         }
-        
+
         // Fallback for non-Linux systems
         0.0
     }
@@ -398,27 +423,33 @@ impl CpuMonitor {
 
 // Memory Monitor Implementation
 impl MemoryMonitor {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             last_memory_info: None,
         }
     }
-    
+
     fn get_memory_usage(&mut self) -> f32 {
         #[cfg(feature = "sysinfo")]
         {
             use sysinfo::{System, SystemExt};
-            
+
             let mut sys = System::new_all();
             sys.refresh_all();
-            
-            sys.used_memory() as f32 / (1024.0 * 1024.0) // Convert to MB
+
+            let used_memory = sys.used_memory() as f32 / (1024.0 * 1024.0); // Convert to MB
+
+            // Store current memory info for future comparisons
+            self.last_memory_info = Some(sys.used_memory() as u64);
+
+            used_memory
         }
-        
+
         #[cfg(not(feature = "sysinfo"))]
         {
-            // Fallback implementation
-            0.0
+            // Fallback implementation - could use system-specific APIs
+            // For now, return a dummy value
+            100.0 // MB
         }
     }
 }

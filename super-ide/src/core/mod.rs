@@ -49,7 +49,7 @@ pub struct SuperIDE {
     config: Arc<RwLock<Configuration>>,
     
     /// AI engine for code intelligence
-    ai_engine: Arc<AiEngine>,
+    ai_engine: AiEngine,
     
     /// Code editor instance
     editor: Arc<Mutex<Editor>>,
@@ -166,7 +166,7 @@ impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
         let ai_engine = AiEngine::new(AiConfig::from(&config));
-        let editor = Editor::new(&config).await.map_err(|e| IdeError::Editor(e.to_string()))?;
+        let editor = Editor::new(&config, Arc::new(ai_engine.clone())).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
         // Initialize terminal manager with default config
@@ -191,7 +191,7 @@ impl SuperIDE {
         
         Ok(Self {
             config: Arc::new(RwLock::new(config)),
-            ai_engine: Arc::new(ai_engine),
+            ai_engine,
             editor: Arc::new(Mutex::new(editor)),
             event_bus: Arc::new(event_bus),
             terminal_manager,
@@ -200,7 +200,7 @@ impl SuperIDE {
     }
     
     /// Get AI engine reference
-    pub fn ai_engine(&self) -> &Arc<AiEngine> {
+    pub fn ai_engine(&self) -> &AiEngine {
         &self.ai_engine
     }
     
@@ -235,10 +235,10 @@ impl SuperIDE {
         update(&mut state);
     }
     
-    /// Load a project
+    /// Load a project and scan for files
     pub async fn load_project(&self, project_path: std::path::PathBuf) -> IdeResult<String> {
         let project_id = uuid::Uuid::new_v4().to_string();
-        
+
         let project_info = ProjectInfo {
             id: project_id.clone(),
             name: project_path
@@ -253,11 +253,34 @@ impl SuperIDE {
             last_opened: chrono::Utc::now(),
             ai_context: AIContext::default(),
         };
-        
+
+        // Scan project directory for files
+        let mut project_files = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&project_path) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    if let Ok(metadata) = entry.metadata() {
+                        if metadata.is_file() {
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                project_files.push(file_name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         self.update_state(|state| {
             state.projects.push(project_info);
         }).await;
-        
+
+        // Update config with workspace path
+        {
+            let mut config = self.config.write().await;
+            config.ide.workspace_path = project_path.to_string_lossy().to_string();
+        }
+
+        log::info!("Loaded project '{}' with {} files", project_id, project_files.len());
         Ok(project_id)
     }
     
@@ -336,14 +359,159 @@ impl SuperIDE {
     pub async fn execute_command(&self, command: &str, title: Option<String>) -> IdeResult<super::terminal::ProcessResult> {
         let session_id = self.create_terminal(title).await?;
         self.start_terminal(&session_id).await?;
-        
+
         let executor = super::terminal::CommandExecutor::default();
         let result = executor.execute(command).await?;
-        
+
         // Clean up the session
         let _ = self.stop_terminal(&session_id).await;
-        
+
         Ok(result)
+    }
+
+    /// Open a file in the editor
+    pub async fn open_file(&self, file_path: std::path::PathBuf) -> IdeResult<String> {
+        let editor = self.editor.lock().await;
+        let document_id = editor.open_file(file_path.clone()).await?;
+
+        // Get document info for state tracking
+        let doc_info = {
+            let doc_opt = editor.get_active_document().await;
+            if let Some(doc) = doc_opt {
+                let doc_read = doc.read().await;
+                EditorTab {
+                    id: document_id.clone(),
+                    title: doc_read.title.clone(),
+                    file_path: doc_read.path.clone(),
+                    is_modified: doc_read.is_modified,
+                    language: doc_read.language.clone(),
+                    cursor_position: (doc_read.cursor_line, doc_read.cursor_column),
+                }
+            } else {
+                return Err(IdeError::Editor("Failed to get document info".to_string()));
+            }
+        };
+
+        // Add to active tabs
+        self.update_state(|state| {
+            // Remove if already exists
+            state.active_tabs.retain(|tab| tab.id != document_id);
+            state.active_tabs.push(doc_info);
+        }).await;
+
+        // Publish event
+        let _ = self.event_bus.publish("editor", crate::utils::event_bus::IdeEvent::EditorOpened {
+            document_id: document_id.clone(),
+            file_path: file_path.to_string_lossy().to_string(),
+        });
+
+        Ok(document_id)
+    }
+
+    /// Save the active document
+    pub async fn save_active_file(&self) -> IdeResult<()> {
+        let editor = self.editor.lock().await;
+        editor.save_active_document().await?;
+
+        // Update state
+        if let Some(active_doc) = editor.get_active_document().await {
+            let doc_read = active_doc.read().await;
+            let document_id = doc_read.id.clone();
+
+            self.update_state(|state| {
+                if let Some(tab) = state.active_tabs.iter_mut().find(|tab| tab.id == document_id) {
+                    tab.is_modified = false;
+                }
+            }).await;
+        }
+
+        Ok(())
+    }
+
+    /// Close a file/document
+    pub async fn close_file(&self, document_id: &str) -> IdeResult<bool> {
+        let editor = self.editor.lock().await;
+        let closed = editor.close_document(document_id).await?;
+
+        if closed {
+            // Remove from active tabs
+            self.update_state(|state| {
+                state.active_tabs.retain(|tab| tab.id != document_id);
+            }).await;
+
+            // Publish event
+            let _ = self.event_bus.publish("editor", crate::utils::event_bus::IdeEvent::EditorClosed {
+                document_id: document_id.to_string(),
+            });
+        }
+
+        Ok(closed)
+    }
+
+    /// Get list of open files
+    pub async fn get_open_files(&self) -> Vec<EditorTab> {
+        let state = self.get_state().await;
+        state.active_tabs
+    }
+
+    /// Get current workspace files
+    pub async fn get_workspace_files(&self) -> IdeResult<Vec<String>> {
+        let config = self.config.read().await;
+        let workspace_path = std::path::PathBuf::from(&config.ide.workspace_path);
+
+        let mut files = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&workspace_path) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    if let Ok(metadata) = entry.metadata() {
+                        if metadata.is_file() {
+                            if let Some(file_name) = entry.file_name().to_str() {
+                                files.push(file_name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(files)
+    }
+
+    /// Get code completions for the current context
+    pub async fn get_code_completions(&self, document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
+        let editor = self.editor.lock().await;
+
+        let context = crate::editor::CompletionContext {
+            cursor_position: crate::editor::CursorPosition {
+                line: cursor_position.0,
+                column: cursor_position.1,
+            },
+            language: "Rust".to_string(), // Would detect from document
+            text_before_cursor: text_context.to_string(),
+            text_after_cursor: String::new(),
+        };
+
+        let completions = editor.get_completions(&context).await?;
+        Ok(completions)
+    }
+
+    /// Analyze code for issues and suggestions
+    pub async fn analyze_code(&self, code: &str, language: &str) -> IdeResult<crate::ai::AnalysisResult> {
+        let analysis = self.ai_engine.analyze_code(code, language).await?;
+        Ok(analysis)
+    }
+
+    /// Get AI code suggestions
+    pub async fn get_ai_suggestions(&self, context: &str, language: &str) -> IdeResult<String> {
+        let request = crate::ai::CompletionRequest {
+            prompt: format!("Provide code suggestions for: {}", context),
+            context: context.to_string(),
+            language: language.to_string(),
+            max_tokens: Some(100),
+        };
+
+        let response = self.ai_engine.generate_completion(request).await?;
+        Ok(response.text)
     }
 }
 

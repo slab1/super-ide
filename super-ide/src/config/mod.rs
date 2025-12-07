@@ -305,19 +305,33 @@ pub struct KeyboardShortcuts {
 impl Configuration {
     /// Load configuration from default locations
     pub async fn load() -> Result<Self, ConfigError> {
-        let config = Config::builder()
-            .add_source(config::File::with_name("config/default"))
-            .add_source(Environment::with_prefix("SUPER_IDE"))
-            .build()
+        let config_paths = Self::get_config_paths();
+
+        let mut config_builder = Config::builder()
+            .add_source(config::File::with_name("config/default"));
+
+        // Try to load from each config path
+        for path in config_paths {
+            if path.exists() {
+                if let Some(file_name) = path.to_str() {
+                    config_builder = config_builder.add_source(config::File::with_name(file_name));
+                }
+            }
+        }
+
+        // Add environment variables
+        config_builder = config_builder.add_source(Environment::with_prefix("SUPER_IDE"));
+
+        let config = config_builder.build()
             .map_err(|e| ConfigError::Load(e.to_string()))?;
-        
+
         // Load and validate
         let mut settings: Configuration = config.try_deserialize()
             .map_err(|e| ConfigError::Load(e.to_string()))?;
-            
+
         settings.validate()?;
         settings.apply_defaults();
-        
+
         Ok(settings)
     }
     

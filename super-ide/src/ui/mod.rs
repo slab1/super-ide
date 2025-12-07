@@ -275,10 +275,17 @@ async fn save_document(
 
 /// Get auto-completion suggestions
 async fn get_completion(
-    State(_state): State<UiState>,
+    State(state): State<UiState>,
+    Json(request): Json<CompletionRequest>,
 ) -> impl IntoResponse {
-    // This would handle completion requests
-    Json::<Vec<CompletionItem>>(vec![])
+    match state.ide.get_code_completions(&request.document_id, (request.cursor_position.0, request.cursor_position.1), &request.text_before).await {
+        Ok(completions) => {
+            Json(serde_json::json!({"success": true, "completions": completions}))
+        }
+        Err(e) => {
+            Json(serde_json::json!({"success": false, "error": e.to_string(), "completions": []}))
+        }
+    }
 }
 
 /// Analyze code using AI
@@ -355,13 +362,16 @@ async fn websocket_connection(
     state: UiState,
 ) {
     println!("🔗 New WebSocket connection established");
-    
+
     // Subscribe to events
     let mut event_receiver = state.event_sender.subscribe();
-    
+
     // Handle messages from client
     let (mut sender, mut receiver) = socket.split();
-    
+
+    // Clone IDE for the event task
+    let ide_clone = state.ide.clone();
+
     // Start event forwarding task
     let event_task = tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
@@ -382,6 +392,16 @@ async fn websocket_connection(
                     }
                 },
                 UiEvent::CompletionRequest { document_id, context } => {
+                    // Get actual completions from the IDE
+                    let completions = match ide_clone.get_code_completions(
+                        &document_id,
+                        (context.cursor_position.line, context.cursor_position.column),
+                        &context.text_before_cursor
+                    ).await {
+                        Ok(comps) => comps,
+                        Err(_) => vec![],
+                    };
+
                     WsMessage::Completion {
                         context: CompletionRequest {
                             document_id,
@@ -390,11 +410,11 @@ async fn websocket_connection(
                             text_after: context.text_after_cursor,
                             language: context.language,
                         },
-                        completions: vec![], // Would be populated with actual completions
+                        completions,
                     }
                 }
             };
-            
+
             if let Ok(json) = serde_json::to_string(&message) {
                 if sender.send(axum::extract::ws::Message::Text(json)).await.is_err() {
                     break;
@@ -402,7 +422,7 @@ async fn websocket_connection(
             }
         }
     });
-    
+
     // Handle incoming WebSocket messages
     while let Some(msg) = receiver.next().await {
         if let Ok(msg) = msg {
@@ -415,7 +435,7 @@ async fn websocket_connection(
             break;
         }
     }
-    
+
     event_task.abort();
     println!("🔌 WebSocket connection closed");
 }
