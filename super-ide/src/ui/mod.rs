@@ -20,6 +20,8 @@ use futures::{StreamExt, SinkExt};
 use log::info;
 
 use crate::core::SuperIDE;
+use crate::api::{ApiState, create_api_router};
+use crate::terminal::ws_handler::TerminalWebSocketState;
 
 use crate::editor::{CompletionContext, CompletionItem};
 
@@ -92,20 +94,22 @@ pub enum UiEvent {
 
 // Main UI handler
 pub struct WebUI {
-    state: UiState,
+    ui_state: UiState,
+    api_state: ApiState,
     server_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl WebUI {
     /// Create a new web UI instance
-    pub fn new(ide: Arc<SuperIDE>) -> Self {
+    pub fn new(ide: Arc<SuperIDE>, api_state: ApiState) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
         
         Self {
-            state: UiState {
-                ide,
+            ui_state: UiState {
+                ide: ide.clone(),
                 event_sender,
             },
+            api_state: api_state.clone(),
             server_task: None,
         }
     }
@@ -113,17 +117,27 @@ impl WebUI {
     /// Start the web server
     pub async fn start(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
         let app = Router::new()
-            .route("/", get(index))
-            .route("/api/health", get(health_check))
+            // Static file serving for frontend
+            .route("/", get(serve_frontend))
+            .route("/health", get(health_check))
+            
+            // API routes (using the new API module)
+            .nest("/", create_api_router(self.api_state.clone()))
+            
+            // WebSocket endpoints
+            .route("/ws", get(websocket_handler))
+            .route("/ws/terminal", get(terminal_websocket_handler))
+            
+            // Legacy UI routes (for backward compatibility)
             .route("/api/files", get(list_files))
             .route("/api/open/:path", get(open_file))
             .route("/api/save/:document_id", get(save_document))
             .route("/api/complete", get(get_completion))
             .route("/api/analyze", post(analyze_code))
             .route("/api/ai/suggest", post(get_ai_suggestion))
-            .route("/ws", get(websocket_handler))
+            
             .layer(CorsLayer::new().allow_origin(Any))
-            .with_state(self.state.clone());
+            .with_state(self.ui_state.clone());
             
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(&addr).await?;
@@ -153,12 +167,34 @@ impl WebUI {
 
 // HTTP Handlers
 
-/// Main HTML interface
+/// Serve frontend HTML
+async fn serve_frontend() -> impl IntoResponse {
+    Html(include_str!("./web/index.html"))
+}
+
+/// Main HTML interface (legacy)
 async fn index() -> impl IntoResponse {
     Html(include_str!("./web/index.html"))
 }
 
-/// Health check endpoint
+/// Terminal WebSocket handler
+async fn terminal_websocket_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<ApiState>,
+) -> impl IntoResponse {
+    let terminal_state = TerminalWebSocketState {
+        ide: state.ide.clone(),
+        terminal_manager: Arc::new(tokio::sync::RwLock::new(
+            crate::terminal::TerminalManager::new(
+                crate::terminal::TerminalConfig::default()
+            )
+        )),
+    };
+    
+    crate::terminal::ws_handler::terminal_websocket_handler(ws, terminal_state).await
+}
+
+/// Health check endpoint (legacy UI handler)
 async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
     let ide_state = state.ide.get_state().await;
     let ai_provider_result = state.ide.ai_engine().ai_provider().await;

@@ -7,6 +7,7 @@ pub mod core;
 pub mod ai;
 pub mod editor;
 pub mod ui;
+pub mod api;
 pub mod config;
 pub mod utils;
 pub mod terminal;

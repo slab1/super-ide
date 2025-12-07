@@ -10,6 +10,8 @@ use crate::config::Configuration;
 use crate::utils::file_manager::FileManager;
 use crate::ai::{AiEngine, CompletionRequest};
 
+
+
 /// Editor errors
 #[derive(Error, Debug)]
 pub enum EditorError {

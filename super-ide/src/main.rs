@@ -6,7 +6,10 @@ use std::sync::Arc;
 use super_ide::{
     initialize, Configuration,
     ui::WebUI,
+    api::create_api_router,
+    terminal::ws_handler::terminal_websocket_handler,
     utils::performance::global_performance_monitor,
+    utils::file_manager::FileManager,
     config::AIProvider,
 };
 
@@ -131,8 +134,19 @@ async fn main() -> Result<()> {
     // Performance monitoring is automatically started with global instance
     let _monitor = global_performance_monitor();
     
-    // Start web UI
-    let mut web_ui = WebUI::new(Arc::new(ide));
+    // Initialize file manager
+    let file_manager = FileManager::new().await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
+    
+    // Create API state
+    let api_state = super_ide::api::ApiState {
+        ide: Arc::new(ide.clone()),
+        file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
+        event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+    };
+    
+    // Start web UI with API integration
+    let mut web_ui = WebUI::new(Arc::new(ide), api_state);
     if let Err(e) = web_ui.start(args.port).await {
         eprintln!("Error starting web UI: {}", e);
         return Ok(());
@@ -635,8 +649,19 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
     let _config = load_configuration(args).await?;
     let ide = initialize().await?;
     
+    // Initialize file manager
+    let file_manager = FileManager::new().await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
+    
+    // Create API state
+    let api_state = super_ide::api::ApiState {
+        ide: Arc::new(ide.clone()),
+        file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
+        event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+    };
+    
     // Start web UI
-    let mut web_ui = WebUI::new(Arc::new(ide));
+    let mut web_ui = WebUI::new(Arc::new(ide), api_state);
     if let Err(e) = web_ui.start(port).await {
         eprintln!("Error starting web UI: {}", e);
         return Ok(());
