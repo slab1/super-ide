@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use log::{info, debug, error};
+use log::debug;
 
 /// MCP function call request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,7 +94,7 @@ pub struct TwitterUserTweetsRequest {
 /// MCP API client
 pub struct McpApiClient {
     client: Client,
-    config: ExternalConfig,
+    _config: ExternalConfig,
     base_url: String,
 }
 
@@ -110,7 +110,7 @@ impl McpApiClient {
 
         Self {
             client,
-            config,
+            _config: config,
             base_url,
         }
     }
@@ -139,9 +139,10 @@ impl McpApiClient {
             .await
             .map_err(|e| ExternalError::HttpError(e.to_string()))?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(ExternalError::McpError(format!("HTTP {}: {}", response.status(), error_text)));
+            return Err(ExternalError::McpError(format!("HTTP {}: {}", status, error_text)));
         }
 
         let response_json: serde_json::Value = response

@@ -642,7 +642,7 @@ pub struct HealthStatus {
 
 /// Search Twitter tweets via MCP
 pub async fn mcp_search_tweets(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::api::TwitterSearchRequest>,
 ) -> impl IntoResponse {
     // For now, we'll create a simple MCP client
@@ -664,7 +664,7 @@ pub async fn mcp_search_tweets(
 
 /// Get Twitter user info via MCP
 pub async fn mcp_get_user_info(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::api::TwitterUserRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -684,7 +684,7 @@ pub async fn mcp_get_user_info(
 
 /// Get Twitter user tweets via MCP
 pub async fn mcp_get_user_tweets(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::api::TwitterUserTweetsRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -704,7 +704,7 @@ pub async fn mcp_get_user_tweets(
 
 /// Get available MCP functions
 pub async fn mcp_get_functions(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
     let client = crate::external::api::McpApiClient::new(config);
@@ -723,7 +723,7 @@ pub async fn mcp_get_functions(
 
 /// Navigate browser
 pub async fn browser_navigate(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserNavigateRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -743,7 +743,7 @@ pub async fn browser_navigate(
 
 /// Take browser screenshot
 pub async fn browser_screenshot(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserScreenshotRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -753,7 +753,7 @@ pub async fn browser_screenshot(
         Ok(image_data) => {
             info!("Browser screenshot taken successfully");
             // Return base64 encoded image
-            let base64_data = base64::encode(&image_data);
+            let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &image_data);
             ApiResponse::success(base64_data)
         }
         Err(e) => {
@@ -765,7 +765,7 @@ pub async fn browser_screenshot(
 
 /// Execute JavaScript in browser
 pub async fn browser_execute_script(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserExecuteScriptRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -785,7 +785,7 @@ pub async fn browser_execute_script(
 
 /// Click element in browser
 pub async fn browser_click(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserClickRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -805,7 +805,7 @@ pub async fn browser_click(
 
 /// Type text in browser
 pub async fn browser_type(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserTypeRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -825,7 +825,7 @@ pub async fn browser_type(
 
 /// Wait for element in browser
 pub async fn browser_wait(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<crate::external::browser::BrowserWaitRequest>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
@@ -845,7 +845,7 @@ pub async fn browser_wait(
 
 /// Get browser page info
 pub async fn browser_get_page_info(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
     let client = crate::external::browser::BrowserClient::new(config);
@@ -864,7 +864,7 @@ pub async fn browser_get_page_info(
 
 /// Get browser element info
 pub async fn browser_get_element_info(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
     Json(request): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let selector = request.get("selector")
@@ -892,7 +892,7 @@ pub async fn browser_get_element_info(
 
 /// Get external integrations status
 pub async fn external_status(
-    State(state): State<super::ui::AppState>,
+    State(_state): State<super::ui::AppState>,
 ) -> impl IntoResponse {
     let config = crate::external::ExternalConfig::default();
     let browser_client = crate::external::browser::BrowserClient::new(config.clone());

@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
-use log::{info, warn, error};
+use log::{info, error};
 
 /// Configuration for external integrations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,8 +185,8 @@ impl ExternalManager {
 
     /// Check if MCP server is running
     pub async fn is_mcp_server_running(&self) -> bool {
-        let process_lock = self.mcp_server_process.lock().await;
-        if let Some(ref child) = *process_lock {
+        let mut process_lock = self.mcp_server_process.lock().await;
+        if let Some(child) = process_lock.as_mut() {
             matches!(child.try_wait(), Ok(None))
         } else {
             false
@@ -195,8 +195,8 @@ impl ExternalManager {
 
     /// Check if browser is running
     pub async fn is_browser_running(&self) -> bool {
-        let process_lock = self.browser_process.lock().await;
-        if let Some(ref child) = *process_lock {
+        let mut process_lock = self.browser_process.lock().await;
+        if let Some(child) = process_lock.as_mut() {
             matches!(child.try_wait(), Ok(None))
         } else {
             false

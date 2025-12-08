@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use log::{info, debug, error};
+use log::debug;
 
 /// Browser automation request types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ pub struct ElementBoundingBox {
 /// Browser automation client
 pub struct BrowserClient {
     client: Client,
-    config: ExternalConfig,
+    _config: ExternalConfig,
     debug_url: String,
 }
 
@@ -102,7 +102,7 @@ impl BrowserClient {
 
         Self {
             client,
-            config,
+            _config: config,
             debug_url,
         }
     }
@@ -151,7 +151,7 @@ impl BrowserClient {
             if let Some(data) = response.data {
                 if let Some(base64_str) = data.as_str() {
                     // Assume the response contains base64 encoded image data
-                    base64::decode(base64_str)
+                    base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_str)
                         .map_err(|e| ExternalError::JsonError(format!("Invalid base64: {}", e)))
                 } else {
                     Err(ExternalError::BrowserError("Screenshot data is not a string".to_string()))
@@ -327,9 +327,10 @@ impl BrowserClient {
             .await
             .map_err(|e| ExternalError::HttpError(e.to_string()))?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(ExternalError::BrowserError(format!("HTTP {}: {}", response.status(), error_text)));
+            return Err(ExternalError::BrowserError(format!("HTTP {}: {}", status, error_text)));
         }
 
         let response_json: serde_json::Value = response
