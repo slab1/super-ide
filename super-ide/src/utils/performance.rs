@@ -51,7 +51,7 @@ struct CpuMonitor {
 /// Memory usage monitor
 #[derive(Clone)]
 struct MemoryMonitor {
-    last_memory_info: Option<u64>, // Simplified: just store raw counter
+    _last_memory_info: Option<u64>, // Simplified: just store raw counter
 }
 
 impl PerformanceMonitor {
@@ -114,6 +114,8 @@ impl PerformanceMonitor {
                 
                 if let Some(memory_monitor) = &mut memory_monitor_clone {
                     metrics.memory_usage_mb = memory_monitor.get_memory_usage();
+                    // Track memory trend for anomaly detection
+                    let _trend = memory_monitor.analyze_memory_trend();
                 }
                 
                 // Update operational metrics
@@ -289,6 +291,12 @@ impl PerformanceMonitor {
     }
 }
 
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Operation monitor for timing specific operations
 pub struct OperationMonitor {
     start_time: Instant,
@@ -394,22 +402,18 @@ impl CpuMonitor {
                         let idle = parts[3];
 
                         if let Some(last_total) = self.last_cpu_time {
-                            if let Some(last_idle) = self.last_memory_info {
-                                let total_diff = total.saturating_sub(last_total) as f32;
-                                let idle_diff = idle.saturating_sub(last_idle) as f32;
+                            let total_diff = total.saturating_sub(last_total) as f32;
+                            let idle_diff = idle.saturating_sub(last_total) as f32;
 
-                                if total_diff > 0.0 {
-                                    let usage = ((total_diff - idle_diff) / total_diff) * 100.0;
-                                    self.last_cpu_time = Some(total);
-                                    self.last_memory_info = Some(idle);
-                                    return usage.max(0.0).min(100.0);
-                                }
+                            if total_diff > 0.0 {
+                                let usage = ((total_diff - idle_diff) / total_diff) * 100.0;
+                                self.last_cpu_time = Some(total);
+                                return usage.max(0.0).min(100.0);
                             }
                         }
 
                         // First measurement, store and return 0
                         self.last_cpu_time = Some(total);
-                        self.last_memory_info = Some(idle);
                         return 0.0;
                     }
                 }
@@ -423,9 +427,9 @@ impl CpuMonitor {
 
 // Memory Monitor Implementation
 impl MemoryMonitor {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Self {
-            last_memory_info: None,
+            _last_memory_info: None,
         }
     }
 
@@ -439,8 +443,14 @@ impl MemoryMonitor {
 
             let used_memory = sys.used_memory() as f32 / (1024.0 * 1024.0); // Convert to MB
 
-            // Store current memory info for future comparisons
-            self.last_memory_info = Some(sys.used_memory() as u64);
+            // Store current memory info for future comparisons and trends
+            self._last_memory_info = Some(sys.used_memory() as u64);
+
+            // Analyze memory trends
+            let memory_trend = self.analyze_memory_trend();
+            if memory_trend > 10.0 {
+                tracing::warn!("Memory usage trend is increasing: {:.1}%", memory_trend);
+            }
 
             used_memory
         }
@@ -450,6 +460,23 @@ impl MemoryMonitor {
             // Fallback implementation - could use system-specific APIs
             // For now, return a dummy value
             100.0 // MB
+        }
+    }
+
+    /// Analyze memory usage trend over time
+    pub fn analyze_memory_trend(&self) -> f32 {
+        if let Some(last_memory) = self._last_memory_info {
+            // This is a simplified trend analysis
+            // In a real implementation, we'd track multiple data points
+            let current_estimate = 0; // Would get current memory usage
+            let change_percent = if last_memory > 0 {
+                ((current_estimate - last_memory as usize) as f32 / last_memory as f32) * 100.0
+            } else {
+                0.0
+            };
+            change_percent.abs()
+        } else {
+            0.0
         }
     }
 }

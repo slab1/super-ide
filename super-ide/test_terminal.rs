@@ -25,7 +25,7 @@ async fn test_command_execution() {
     let result = executor.execute("echo 'Hello, World!'").await;
     assert!(result.is_ok());
     
-    let output = result.unwrap();
+    let output = result.expect("Command execution should succeed");
     assert!(output.exit_code == 0);
     assert!(output.stdout.contains("Hello, World!"));
 }

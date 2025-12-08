@@ -360,3 +360,13 @@ impl std::fmt::Display for GitStatus {
         }
     }
 }
+
+impl Default for FileManager {
+    fn default() -> Self {
+        let (event_sender, _) = mpsc::unbounded_channel();
+        Self {
+            watchers: vec![],
+            event_sender,
+        }
+    }
+}

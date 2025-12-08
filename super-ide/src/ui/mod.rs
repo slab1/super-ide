@@ -2,10 +2,9 @@
 
 use axum::{
     extract::{WebSocketUpgrade, State},
-    routing::post,
+    routing::{get, post, put, delete},
     extract::ws::WebSocket,
     response::{IntoResponse, Html},
-    routing::get,
     Router,
     Json,
 };
@@ -17,8 +16,14 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use futures::{StreamExt, SinkExt};
+use log::info;
+use tokio::sync::RwLock;
 
 use crate::core::SuperIDE;
+
+use crate::terminal::ws_handler::TerminalWebSocketState;
+use crate::utils::file_manager::FileManager;
+use crate::utils::event_bus::EventBus;
 
 use crate::editor::{CompletionContext, CompletionItem};
 
@@ -89,9 +94,18 @@ pub enum UiEvent {
     },
 }
 
+// Unified App State
+#[derive(Clone)]
+pub struct AppState {
+    pub ide: Arc<SuperIDE>,
+    pub file_manager: Arc<RwLock<FileManager>>,
+    pub event_bus: Arc<EventBus>,
+    pub event_sender: broadcast::Sender<UiEvent>,
+}
+
 // Main UI handler
 pub struct WebUI {
-    state: UiState,
+    app_state: AppState,
     server_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -99,10 +113,14 @@ impl WebUI {
     /// Create a new web UI instance
     pub fn new(ide: Arc<SuperIDE>) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
+        let file_manager = Arc::new(RwLock::new(FileManager::default()));
+        let event_bus = ide.event_bus().clone();
         
         Self {
-            state: UiState {
-                ide,
+            app_state: AppState {
+                ide: ide.clone(),
+                file_manager,
+                event_bus,
                 event_sender,
             },
             server_task: None,
@@ -111,18 +129,53 @@ impl WebUI {
     
     /// Start the web server
     pub async fn start(&mut self, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+        // Import API handlers into the UI module scope
+        use crate::api::{load_file, save_file, create_file, delete_file, get_file_tree, search_files};
+        use crate::api::{ai_chat, get_completions, analyze_code};
+        use crate::api::{git_status, git_branches, git_commit};
+        use crate::api::{project_info, get_config, health_check};
+        
         let app = Router::new()
-            .route("/", get(index))
-            .route("/api/health", get(health_check))
+            // Static file serving for frontend
+            .route("/", get(serve_frontend))
+            .route("/health", get(health_check))
+            
+            // File operations
+            .route("/api/files/:path", get(load_file))
+            .route("/api/files/:path", put(save_file))
+            .route("/api/files/create", post(create_file))
+            .route("/api/files/:path", delete(delete_file))
+            .route("/api/files/tree", get(get_file_tree))
+            .route("/api/files/search", get(search_files))
+            
+            // AI endpoints
+            .route("/api/ai/chat", post(ai_chat))
+            .route("/api/ai/completions", post(get_completions))
+            .route("/api/ai/analyze", post(analyze_code))
+            
+            // Git operations
+            .route("/api/git/status", get(git_status))
+            .route("/api/git/branches", get(git_branches))
+            .route("/api/git/commit", post(git_commit))
+            
+            // Project operations
+            .route("/api/project/info", get(project_info))
+            .route("/api/project/config", get(get_config))
+            
+            // WebSocket endpoints
+            .route("/ws", get(websocket_handler))
+            .route("/ws/terminal", get(terminal_websocket_handler))
+            
+            // Legacy UI routes (for backward compatibility)
             .route("/api/files", get(list_files))
             .route("/api/open/:path", get(open_file))
             .route("/api/save/:document_id", get(save_document))
             .route("/api/complete", get(get_completion))
             .route("/api/analyze", post(analyze_code))
             .route("/api/ai/suggest", post(get_ai_suggestion))
-            .route("/ws", get(websocket_handler))
+            
             .layer(CorsLayer::new().allow_origin(Any))
-            .with_state(self.state.clone());
+            .with_state(self.app_state.clone());
             
         let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = TcpListener::bind(&addr).await?;
@@ -152,56 +205,62 @@ impl WebUI {
 
 // HTTP Handlers
 
-/// Main HTML interface
-async fn index() -> impl IntoResponse {
+/// Serve frontend HTML
+async fn serve_frontend() -> impl IntoResponse {
     Html(include_str!("./web/index.html"))
 }
 
-/// Health check endpoint
-async fn health_check(State(state): State<UiState>) -> impl IntoResponse {
-    let ide_state = state.ide.get_state().await;
-    let ai_provider_result = state.ide.ai_engine().ai_provider().await;
-    let ai_provider = ai_provider_result.unwrap_or_else(|_| "local".to_string());
+/// Main HTML interface (legacy)
+
+
+/// Terminal WebSocket handler
+async fn terminal_websocket_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let terminal_state = TerminalWebSocketState {
+        ide: state.ide.clone(),
+        terminal_manager: Arc::new(tokio::sync::RwLock::new(
+            crate::terminal::TerminalManager::new(
+                crate::terminal::TerminalConfig::default()
+            )
+        )),
+    };
     
-    Json(serde_json::json!({
-        "status": "ok",
-        "ide_running": true,
-        "documents_open": ide_state.active_tabs.len(),
-        "ai_enabled": ai_provider != "local",
-    }))
+    crate::terminal::ws_handler::terminal_websocket_handler(ws, axum::extract::State(terminal_state)).await
 }
 
+
+
 /// List files in workspace
-async fn list_files(State(state): State<UiState>) -> impl IntoResponse {
+async fn list_files(State(state): State<AppState>) -> impl IntoResponse {
     let workspace_path = state.ide.config().read().await.workspace_dir();
     
     match std::fs::read_dir(workspace_path) {
         Ok(entries) => {
             let mut files = Vec::new();
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            files.push(FileInfo {
-                                name: entry.file_name().to_string_lossy().to_string(),
-                                path: entry.path().to_string_lossy().to_string(),
-                                size: metadata.len(),
-                                modified: metadata.modified()
-                                    .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
-                                    .unwrap_or_else(|_| chrono::Utc::now()),
-                                is_file: true,
-                            });
-                        } else if metadata.is_dir() {
-                            files.push(FileInfo {
-                                name: entry.file_name().to_string_lossy().to_string(),
-                                path: entry.path().to_string_lossy().to_string(),
-                                size: 0,
-                                modified: metadata.modified()
-                                    .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
-                                    .unwrap_or_else(|_| chrono::Utc::now()),
-                                is_file: false,
-                            });
-                        }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        files.push(FileInfo {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            size: metadata.len(),
+                            modified: metadata.modified()
+                                .map(chrono::DateTime::<chrono::Utc>::from)
+                                .unwrap_or_else(|_| chrono::Utc::now()),
+                            is_file: true,
+                        });
+                    } else if metadata.is_dir() {
+                        files.push(FileInfo {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            size: 0,
+                            modified: metadata.modified()
+                                .map(chrono::DateTime::<chrono::Utc>::from)
+                                .unwrap_or_else(|_| chrono::Utc::now()),
+                            is_file: false,
+                        });
                     }
                 }
             }
@@ -213,7 +272,7 @@ async fn list_files(State(state): State<UiState>) -> impl IntoResponse {
 
 /// Open a file
 async fn open_file(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     let path_clone = path.clone();
@@ -247,7 +306,7 @@ async fn open_file(
 
 /// Save document
 async fn save_document(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Path(document_id): Path<String>,
 ) -> impl IntoResponse {
     let editor = state.ide.editor();
@@ -275,7 +334,7 @@ async fn save_document(
 
 /// Get auto-completion suggestions
 async fn get_completion(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Json(request): Json<CompletionRequest>,
 ) -> impl IntoResponse {
     match state.ide.get_code_completions(&request.document_id, (request.cursor_position.0, request.cursor_position.1), &request.text_before).await {
@@ -288,37 +347,11 @@ async fn get_completion(
     }
 }
 
-/// Analyze code using AI
-async fn analyze_code(
-    State(state): State<UiState>,
-    Json(payload): Json<CodeAnalysisRequest>,
-) -> impl IntoResponse {
-    let ai_engine = state.ide.ai_engine();
-    
-    match ai_engine.analyze_code(&payload.code, &payload.language).await {
-        Ok(analysis) => {
-            Json(serde_json::json!({
-                "success": true,
-                "analysis": {
-                    "language": payload.language,
-                    "complexity_score": analysis.complexity_score,
-                    "issues": analysis.issues.len(),
-                    "suggestions": analysis.suggestions.len(),
-                }
-            }))
-        }
-        Err(e) => {
-            Json(serde_json::json!({
-                "success": false,
-                "error": e.to_string()
-            }))
-        }
-    }
-}
+
 
 /// Get AI suggestion
 async fn get_ai_suggestion(
-    State(state): State<UiState>,
+    State(state): State<AppState>,
     Json(payload): Json<AiSuggestionRequest>,
 ) -> impl IntoResponse {
     let ai_engine = state.ide.ai_engine();
@@ -351,7 +384,7 @@ async fn get_ai_suggestion(
 /// WebSocket handler for real-time features
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<UiState>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| websocket_connection(socket, state))
 }
@@ -359,7 +392,7 @@ async fn websocket_handler(
 /// WebSocket connection handler
 async fn websocket_connection(
     socket: WebSocket,
-    state: UiState,
+    state: AppState,
 ) {
     println!("🔗 New WebSocket connection established");
 
@@ -393,14 +426,11 @@ async fn websocket_connection(
                 },
                 UiEvent::CompletionRequest { document_id, context } => {
                     // Get actual completions from the IDE
-                    let completions = match ide_clone.get_code_completions(
+                    let completions = ide_clone.get_code_completions(
                         &document_id,
                         (context.cursor_position.line, context.cursor_position.column),
                         &context.text_before_cursor
-                    ).await {
-                        Ok(comps) => comps,
-                        Err(_) => vec![],
-                    };
+                    ).await.unwrap_or_default();
 
                     WsMessage::Completion {
                         context: CompletionRequest {
@@ -490,7 +520,7 @@ pub enum ClientMessage {
 }
 
 // Handle client messages
-async fn handle_client_message(message: ClientMessage, state: &UiState) {
+async fn handle_client_message(message: ClientMessage, state: &AppState) {
     match message {
         ClientMessage::RequestCompletion { document_id, cursor_position, text_context } => {
             let context = CompletionContext {
@@ -508,18 +538,33 @@ async fn handle_client_message(message: ClientMessage, state: &UiState) {
                 context,
             });
         }
-        ClientMessage::SaveFeedback { suggestion_id: _, rating: _, accepted: _, context: _ } => {
-            // TODO: Implement user feedback
-            // let feedback = UserFeedback {
-            //     timestamp: chrono::Utc::now(),
-            //     suggestion_id,
-            //     rating,
-            //     accepted,
-            //     context,
-            // };
+        ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
+            // Implement user feedback functionality
+            let _feedback = crate::ai::UserFeedback {
+                timestamp: chrono::Utc::now(),
+                suggestion_id: suggestion_id.clone(),
+                rating,
+                accepted,
+                context: context.clone(),
+                feedback_type: if accepted { "acceptance".to_string() } else { "rejection".to_string() },
+            };
             
-            // let ai_engine = state.ide.ai_engine();
-            // ai_engine.learn_from_feedback(feedback).await;
+            // Send feedback to AI engine for learning
+            let ai_engine = state.ide.ai_engine();
+            // Use learn_from_feedback method with string-based pattern ID
+            let pattern_id = format!("suggestion_{}", suggestion_id);
+            if let Err(e) = ai_engine.learn_from_feedback(pattern_id, accepted).await {
+                eprintln!("Failed to process user feedback: {}", e);
+            }
+            
+            // Log feedback for analytics
+            info!(
+                "User feedback: suggestion_id={}, rating={}, accepted={}, context_len={}",
+                suggestion_id,
+                rating,
+                accepted,
+                context.len()
+            );
         }
         ClientMessage::CodeChange { document_id, content, position } => {
             let _ = state.event_sender.send(UiEvent::CodeChanged {

@@ -6,7 +6,10 @@ use std::sync::Arc;
 use super_ide::{
     initialize, Configuration,
     ui::WebUI,
+
+
     utils::performance::global_performance_monitor,
+    utils::file_manager::FileManager,
     config::AIProvider,
 };
 
@@ -131,7 +134,18 @@ async fn main() -> Result<()> {
     // Performance monitoring is automatically started with global instance
     let _monitor = global_performance_monitor();
     
-    // Start web UI
+    // Initialize file manager
+    let file_manager = FileManager::new().await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
+    
+    // Create API state
+    let _api_state = super_ide::api::ApiState {
+        ide: Arc::new(ide.clone()),
+        file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
+        event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+    };
+    
+    // Start web UI with API integration
     let mut web_ui = WebUI::new(Arc::new(ide));
     if let Err(e) = web_ui.start(args.port).await {
         eprintln!("Error starting web UI: {}", e);
@@ -634,6 +648,17 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
     // Initialize Super IDE in server mode
     let _config = load_configuration(args).await?;
     let ide = initialize().await?;
+    
+    // Initialize file manager
+    let file_manager = FileManager::new().await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize file manager: {}", e))?;
+    
+    // Create API state
+    let _api_state = super_ide::api::ApiState {
+        ide: Arc::new(ide.clone()),
+        file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
+        event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+    };
     
     // Start web UI
     let mut web_ui = WebUI::new(Arc::new(ide));

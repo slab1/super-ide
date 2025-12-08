@@ -11,6 +11,13 @@ use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
 use crate::terminal::{TerminalManager, TerminalConfig};
 
+/// Document context information
+#[derive(Debug, Clone)]
+struct DocumentContext {
+    language: String,
+    file_type: String,
+}
+
 /// Main IDE result type
 pub type IdeResult<T> = Result<T, IdeError>;
 
@@ -165,7 +172,7 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = AiEngine::new(AiConfig::from(&config));
+        let ai_engine = AiEngine::new(AiConfig::from(&config)).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let editor = Editor::new(&config, Arc::new(ai_engine.clone())).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
@@ -179,6 +186,8 @@ impl SuperIDE {
             working_directory: None,
             environment: std::env::vars().collect(),
             pty_size: Some((80, 24)),
+            max_output_lines: 1000,
+            command_timeout: tokio::time::Duration::from_secs(30),
         };
         let terminal_manager = Arc::new(TerminalManager::new(terminal_config));
         
@@ -257,13 +266,11 @@ impl SuperIDE {
         // Scan project directory for files
         let mut project_files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&project_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                project_files.push(file_name.to_string());
-                            }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            project_files.push(file_name.to_string());
                         }
                     }
                 }
@@ -332,22 +339,22 @@ impl SuperIDE {
     
     /// Create a new terminal session
     pub async fn create_terminal(&self, title: Option<String>) -> IdeResult<String> {
-        self.terminal_manager.create_session(title).await.map_err(|e| e.into())
+        self.terminal_manager.create_session(title).await
     }
     
     /// Start a terminal session
     pub async fn start_terminal(&self, session_id: &str) -> IdeResult<()> {
-        self.terminal_manager.start_terminal(session_id).await.map_err(|e| e.into())
+        self.terminal_manager.start_terminal(session_id).await
     }
     
     /// Stop a terminal session
     pub async fn stop_terminal(&self, session_id: &str) -> IdeResult<()> {
-        self.terminal_manager.stop_terminal(session_id).await.map_err(|e| e.into())
+        self.terminal_manager.stop_terminal(session_id).await
     }
     
     /// Send input to a terminal session
     pub async fn send_terminal_input(&self, session_id: &str, input: &str) -> IdeResult<()> {
-        self.terminal_manager.send_input(session_id, input).await.map_err(|e| e.into())
+        self.terminal_manager.send_input(session_id, input).await
     }
     
     /// List all terminal sessions
@@ -360,7 +367,7 @@ impl SuperIDE {
         let session_id = self.create_terminal(title).await?;
         self.start_terminal(&session_id).await?;
 
-        let executor = super::terminal::CommandExecutor::default();
+        let mut executor = super::terminal::CommandExecutor::default();
         let result = executor.execute(command).await?;
 
         // Clean up the session
@@ -461,13 +468,11 @@ impl SuperIDE {
 
         let mut files = Vec::new();
         if let Ok(entries) = std::fs::read_dir(&workspace_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Ok(metadata) = entry.metadata() {
-                        if metadata.is_file() {
-                            if let Some(file_name) = entry.file_name().to_str() {
-                                files.push(file_name.to_string());
-                            }
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            files.push(file_name.to_string());
                         }
                     }
                 }
@@ -481,13 +486,21 @@ impl SuperIDE {
     pub async fn get_code_completions(&self, document_id: &str, cursor_position: (usize, usize), text_context: &str) -> IdeResult<Vec<crate::editor::CompletionItem>> {
         let editor = self.editor.lock().await;
 
+        // Use document_id to get document-specific context
+        let document_context = self.get_document_context(document_id).await?;
+        let language = document_context.language;
+        let file_type = document_context.file_type;
+        
+        // Enhance context with document-specific information
+        let enhanced_context = format!("{} | File: {} | Language: {}", text_context, file_type, language);
+
         let context = crate::editor::CompletionContext {
             cursor_position: crate::editor::CursorPosition {
                 line: cursor_position.0,
                 column: cursor_position.1,
             },
-            language: "Rust".to_string(), // Would detect from document
-            text_before_cursor: text_context.to_string(),
+            language,
+            text_before_cursor: enhanced_context,
             text_after_cursor: String::new(),
         };
 
@@ -495,10 +508,37 @@ impl SuperIDE {
         Ok(completions)
     }
 
+    /// Get document-specific context information
+    async fn get_document_context(&self, document_id: &str) -> IdeResult<DocumentContext> {
+        // This would normally look up the document from a document store
+        // For now, provide basic context based on document_id
+        let language = if document_id.contains("rust") {
+            "Rust".to_string()
+        } else if document_id.contains("py") {
+            "Python".to_string()
+        } else if document_id.contains("js") || document_id.contains("ts") {
+            "JavaScript".to_string()
+        } else {
+            "Unknown".to_string()
+        };
+
+        let file_type = if document_id.contains("test") {
+            "Test File".to_string()
+        } else if document_id.contains("main") || document_id.contains("index") {
+            "Entry Point".to_string()
+        } else {
+            "Source File".to_string()
+        };
+
+        Ok(DocumentContext { language, file_type })
+    }
+
     /// Analyze code for issues and suggestions
     pub async fn analyze_code(&self, code: &str, language: &str) -> IdeResult<crate::ai::AnalysisResult> {
-        let analysis = self.ai_engine.analyze_code(code, language).await?;
-        Ok(analysis)
+        match self.ai_engine.analyze_code(code, language).await {
+            Ok(analysis) => Ok(analysis),
+            Err(e) => Err(IdeError::AiEngine(e.to_string())),
+        }
     }
 
     /// Get AI code suggestions
@@ -510,8 +550,10 @@ impl SuperIDE {
             max_tokens: Some(100),
         };
 
-        let response = self.ai_engine.generate_completion(request).await?;
-        Ok(response.text)
+        match self.ai_engine.generate_completion(request).await {
+            Ok(response) => Ok(response.text),
+            Err(e) => Err(IdeError::AiEngine(e.to_string())),
+        }
     }
 }
 
