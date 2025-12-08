@@ -148,7 +148,22 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/project/info", get(project_info))
         .route("/project/config", get(get_config))
         .route("/health", get(health_check))
-        
+
+        // External integrations
+        .route("/external/mcp/search_tweets", post(mcp_search_tweets))
+        .route("/external/mcp/user_info", post(mcp_get_user_info))
+        .route("/external/mcp/user_tweets", post(mcp_get_user_tweets))
+        .route("/external/mcp/functions", get(mcp_get_functions))
+        .route("/external/browser/navigate", post(browser_navigate))
+        .route("/external/browser/screenshot", post(browser_screenshot))
+        .route("/external/browser/execute_script", post(browser_execute_script))
+        .route("/external/browser/click", post(browser_click))
+        .route("/external/browser/type", post(browser_type))
+        .route("/external/browser/wait", post(browser_wait))
+        .route("/external/browser/page_info", get(browser_get_page_info))
+        .route("/external/browser/element_info", post(browser_get_element_info))
+        .route("/external/status", get(external_status))
+
         .with_state(app_state)
 }
 
@@ -621,4 +636,279 @@ pub struct HealthStatus {
     pub documents_open: usize,
     pub ai_enabled: bool,
     pub timestamp: String,
+}
+
+// External Integration Handlers
+
+/// Search Twitter tweets via MCP
+pub async fn mcp_search_tweets(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::api::TwitterSearchRequest>,
+) -> impl IntoResponse {
+    // For now, we'll create a simple MCP client
+    // In a real implementation, this would be managed by the IDE state
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::api::McpApiClient::new(config);
+
+    match client.search_tweets(request).await {
+        Ok(data) => {
+            info!("MCP Twitter search completed successfully");
+            ApiResponse::success(data)
+        }
+        Err(e) => {
+            error!("MCP Twitter search failed: {}", e);
+            ApiResponse::error(format!("Twitter search failed: {}", e))
+        }
+    }
+}
+
+/// Get Twitter user info via MCP
+pub async fn mcp_get_user_info(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::api::TwitterUserRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::api::McpApiClient::new(config);
+
+    match client.get_twitter_user_info(request).await {
+        Ok(data) => {
+            info!("MCP Twitter user info retrieved successfully");
+            ApiResponse::success(data)
+        }
+        Err(e) => {
+            error!("MCP Twitter user info failed: {}", e);
+            ApiResponse::error(format!("Twitter user info failed: {}", e))
+        }
+    }
+}
+
+/// Get Twitter user tweets via MCP
+pub async fn mcp_get_user_tweets(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::api::TwitterUserTweetsRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::api::McpApiClient::new(config);
+
+    match client.get_twitter_user_tweets(request).await {
+        Ok(data) => {
+            info!("MCP Twitter user tweets retrieved successfully");
+            ApiResponse::success(data)
+        }
+        Err(e) => {
+            error!("MCP Twitter user tweets failed: {}", e);
+            ApiResponse::error(format!("Twitter user tweets failed: {}", e))
+        }
+    }
+}
+
+/// Get available MCP functions
+pub async fn mcp_get_functions(
+    State(state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::api::McpApiClient::new(config);
+
+    match client.get_available_functions().await {
+        Ok(functions) => {
+            info!("Retrieved {} MCP functions", functions.len());
+            ApiResponse::success(functions)
+        }
+        Err(e) => {
+            error!("Failed to get MCP functions: {}", e);
+            ApiResponse::error(format!("Failed to get MCP functions: {}", e))
+        }
+    }
+}
+
+/// Navigate browser
+pub async fn browser_navigate(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserNavigateRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.navigate(request).await {
+        Ok(page_info) => {
+            info!("Browser navigation completed successfully");
+            ApiResponse::success(page_info)
+        }
+        Err(e) => {
+            error!("Browser navigation failed: {}", e);
+            ApiResponse::error(format!("Browser navigation failed: {}", e))
+        }
+    }
+}
+
+/// Take browser screenshot
+pub async fn browser_screenshot(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserScreenshotRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.screenshot(request).await {
+        Ok(image_data) => {
+            info!("Browser screenshot taken successfully");
+            // Return base64 encoded image
+            let base64_data = base64::encode(&image_data);
+            ApiResponse::success(base64_data)
+        }
+        Err(e) => {
+            error!("Browser screenshot failed: {}", e);
+            ApiResponse::error(format!("Browser screenshot failed: {}", e))
+        }
+    }
+}
+
+/// Execute JavaScript in browser
+pub async fn browser_execute_script(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserExecuteScriptRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.execute_script(request).await {
+        Ok(result) => {
+            info!("Browser script execution completed successfully");
+            ApiResponse::success(result)
+        }
+        Err(e) => {
+            error!("Browser script execution failed: {}", e);
+            ApiResponse::error(format!("Browser script execution failed: {}", e))
+        }
+    }
+}
+
+/// Click element in browser
+pub async fn browser_click(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserClickRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.click(request).await {
+        Ok(_) => {
+            info!("Browser click completed successfully");
+            ApiResponse::success("Click completed")
+        }
+        Err(e) => {
+            error!("Browser click failed: {}", e);
+            ApiResponse::error(format!("Browser click failed: {}", e))
+        }
+    }
+}
+
+/// Type text in browser
+pub async fn browser_type(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserTypeRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.type_text(request).await {
+        Ok(_) => {
+            info!("Browser text input completed successfully");
+            ApiResponse::success("Text input completed")
+        }
+        Err(e) => {
+            error!("Browser text input failed: {}", e);
+            ApiResponse::error(format!("Browser text input failed: {}", e))
+        }
+    }
+}
+
+/// Wait for element in browser
+pub async fn browser_wait(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<crate::external::browser::BrowserWaitRequest>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.wait_for_element(request).await {
+        Ok(element_info) => {
+            info!("Browser element wait completed successfully");
+            ApiResponse::success(element_info)
+        }
+        Err(e) => {
+            error!("Browser element wait failed: {}", e);
+            ApiResponse::error(format!("Browser element wait failed: {}", e))
+        }
+    }
+}
+
+/// Get browser page info
+pub async fn browser_get_page_info(
+    State(state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.get_page_info().await {
+        Ok(page_info) => {
+            info!("Browser page info retrieved successfully");
+            ApiResponse::success(page_info)
+        }
+        Err(e) => {
+            error!("Browser page info retrieval failed: {}", e);
+            ApiResponse::error(format!("Browser page info retrieval failed: {}", e))
+        }
+    }
+}
+
+/// Get browser element info
+pub async fn browser_get_element_info(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let selector = request.get("selector")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    if selector.is_empty() {
+        return ApiResponse::error("Selector is required".to_string());
+    }
+
+    let config = crate::external::ExternalConfig::default();
+    let client = crate::external::browser::BrowserClient::new(config);
+
+    match client.get_element_info(selector).await {
+        Ok(element_info) => {
+            info!("Browser element info retrieved successfully");
+            ApiResponse::success(element_info)
+        }
+        Err(e) => {
+            error!("Browser element info retrieval failed: {}", e);
+            ApiResponse::error(format!("Browser element info retrieval failed: {}", e))
+        }
+    }
+}
+
+/// Get external integrations status
+pub async fn external_status(
+    State(state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let config = crate::external::ExternalConfig::default();
+    let browser_client = crate::external::browser::BrowserClient::new(config.clone());
+
+    let browser_available = browser_client.is_browser_available().await;
+
+    // For MCP status, we could check if the server is running
+    // For now, we'll just return basic status
+    let status = serde_json::json!({
+        "mcp_server_port": config.mcp_server_port,
+        "browser_debug_port": config.browser_debug_port,
+        "browser_available": browser_available,
+        "external_api_path": config.external_api_path,
+        "browser_path": config.browser_path,
+    });
+
+    info!("External integrations status retrieved");
+    ApiResponse::success(status)
 }

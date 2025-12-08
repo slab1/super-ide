@@ -11,6 +11,7 @@ pub mod api;
 pub mod config;
 pub mod utils;
 pub mod terminal;
+pub mod external;
 
 // Re-export main components
 pub use core::{SuperIDE, IdeResult, IdeError};
