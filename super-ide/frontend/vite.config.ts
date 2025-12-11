@@ -1,13 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import monaco  from 'vite-plugin-monaco-editor'
 
 export default defineConfig({
   plugins: [
     vue(),
-    monaco({
-      languageWorkers: ['editorWorkerService', 'css', 'html', 'json', 'typescript'],
-    }),
+    // Monaco editor will be loaded via CDN in this demo
   ],
   server: {
     port: 3000,

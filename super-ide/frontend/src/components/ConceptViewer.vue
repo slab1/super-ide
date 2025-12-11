@@ -81,8 +81,8 @@
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div
-            v-for="aidids"
-            : in concept.visual_akey="aid.id"
+            v-for="aid in concept.visual_aids"
+            :key="aid.id"
             class="bg-gray-800 rounded-lg p-4"
           >
             <h3 class="font-medium text-white mb-2">{{ aid.title }}</h3>
