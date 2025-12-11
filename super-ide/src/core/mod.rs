@@ -339,7 +339,7 @@ impl SuperIDE {
     
     /// Create a new terminal session
     pub async fn create_terminal(&self, title: Option<String>) -> IdeResult<String> {
-        self.terminal_manager.create_session(title).await
+        self.terminal_manager.create_session(Some("bash"), None, title).await
     }
     
     /// Start a terminal session

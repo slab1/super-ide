@@ -10,6 +10,7 @@
 pub mod ws_handler;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::{Stdio};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -137,10 +138,9 @@ impl TerminalManager {
     }
     
     /// Create a new terminal session with WebSocket support
-    pub async fn create_session(&self, title: Option<String>) -> IdeResult<String> {
+    pub async fn create_session(&self, shell: Option<&str>, cwd: Option<&str>, title: Option<String>) -> IdeResult<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        let working_directory = self.config.working_directory.clone()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let working_directory = PathBuf::from(cwd.unwrap_or("."));
         
         let session = TerminalSession {
             id: session_id.clone(),
@@ -176,7 +176,8 @@ impl TerminalManager {
         }
         
         // Start the shell process
-        let mut child = tokio::process::Command::new(&self.config.shell)
+        let shell_path = shell.unwrap_or(&self.config.shell);
+        let mut child = tokio::process::Command::new(shell_path)
             .current_dir(&working_directory)
             .envs(&self.config.environment)
             .stdin(Stdio::piped())
