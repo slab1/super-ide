@@ -89,6 +89,31 @@ pub struct GitStatusRequest {
     pub path: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LearningProfileRequest {
+    pub name: Option<String>,
+    pub learning_style: Option<String>,
+    pub current_level: Option<String>,
+    pub preferences: Option<LearningPreferencesRequest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LearningPreferencesRequest {
+    pub difficulty_preference: Option<f32>,
+    pub hint_frequency: Option<String>,
+    pub code_completion_level: Option<String>,
+    pub visual_aids_enabled: Option<bool>,
+    pub voice_enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LearningProgressUpdate {
+    pub concept_id: String,
+    pub mastery_level: f32,
+    pub time_spent: Option<u64>,
+    pub attempts: Option<u32>,
+}
+
 // API Response helpers
 impl<T> ApiResponse<T> {
     pub fn success(data: T) -> Self {
@@ -138,6 +163,18 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/ai/chat", post(ai_chat))
         .route("/ai/completions", post(get_completions))
         .route("/ai/analyze", post(analyze_code))
+        
+        // Learning endpoints
+        .route("/learning/profile", get(get_learning_profile))
+        .route("/learning/profile", put(update_learning_profile))
+        .route("/learning/paths", get(get_learning_paths))
+        .route("/learning/modules/:path_id", get(get_learning_module))
+        .route("/learning/concepts/:concept_id", get(get_concept))
+        .route("/learning/progress", get(get_learning_progress))
+        .route("/learning/progress", put(update_learning_progress))
+        .route("/learning/tutor/chat", post(tutor_chat))
+        .route("/learning/tour", post(create_code_tour))
+        .route("/learning/achievements", get(get_achievements))
         
         // Git operations
         .route("/git/status", get(git_status))
@@ -911,4 +948,237 @@ pub async fn external_status(
 
     info!("External integrations status retrieved");
     ApiResponse::success(status)
+}
+
+// Learning Handlers
+
+/// Get student learning profile
+pub async fn get_learning_profile(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    // Mock learning profile - in real implementation, this would load from database
+    let profile = crate::learning::StudentProfile {
+        id: "student-1".to_string(),
+        name: "Demo Student".to_string(),
+        learning_style: crate::learning::LearningStyle::Visual,
+        current_level: crate::learning::SkillLevel::Beginner,
+        progress: std::collections::HashMap::new(),
+        preferences: crate::learning::StudentPreferences {
+            difficulty_preference: 0.5,
+            hint_frequency: crate::learning::HintFrequency::AfterStruggle,
+            code_completion_level: crate::learning::CodeCompletionLevel::Smart,
+            visual_aids_enabled: true,
+            voice_enabled: false,
+        },
+        achievements: Vec::new(),
+    };
+    
+    ApiResponse::success(profile)
+}
+
+/// Update student learning profile
+pub async fn update_learning_profile(
+    State(_state): State<super::ui::AppState>,
+    Json(profile): Json<crate::learning::StudentProfile>,
+) -> impl IntoResponse {
+    info!("Learning profile updated for student: {}", profile.id);
+    
+    // In real implementation, save to database
+    ApiResponse::success("Profile updated successfully")
+}
+
+/// Get available learning paths
+pub async fn get_learning_paths(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let paths = vec![
+        crate::learning::LearningPath {
+            id: "python-fundamentals".to_string(),
+            title: "Python Fundamentals".to_string(),
+            description: "Learn Python programming from basics to advanced concepts".to_string(),
+            modules: vec!["variables".to_string(), "functions".to_string(), "oop".to_string()],
+            estimated_total_duration: std::time::Duration::from_secs(7200),
+            target_audience: "Beginners".to_string(),
+            outcomes: vec!["Write Python programs".to_string(), "Understand OOP".to_string()],
+        },
+        crate::learning::LearningPath {
+            id: "rust-systems".to_string(),
+            title: "Rust Systems Programming".to_string(),
+            description: "Master systems programming with Rust".to_string(),
+            modules: vec!["ownership".to_string(), "borrowing".to_string(), "lifetimes".to_string()],
+            estimated_total_duration: std::time::Duration::from_secs(10800),
+            target_audience: "Intermediate".to_string(),
+            outcomes: vec!["Memory-safe code".to_string(), "Systems programming".to_string()],
+        },
+    ];
+    
+    ApiResponse::success(paths)
+}
+
+/// Get learning module details
+pub async fn get_learning_module(
+    State(_state): State<super::ui::AppState>,
+    Path(path_id): Path<String>,
+) -> impl IntoResponse {
+    let module = crate::learning::LearningModule {
+        id: path_id,
+        title: "Sample Module".to_string(),
+        description: "Learn programming fundamentals".to_string(),
+        concepts: vec![
+            crate::learning::Concept {
+                id: "concept-1".to_string(),
+                name: "Variables and Data Types".to_string(),
+                explanation: "Learn about variables, data types, and how to store information in your programs.".to_string(),
+                code_examples: Vec::new(),
+                visual_aids: Vec::new(),
+                interactive_demos: Vec::new(),
+            },
+            crate::learning::Concept {
+                id: "concept-2".to_string(),
+                name: "Functions".to_string(),
+                explanation: "Understand how to create reusable code blocks with functions.".to_string(),
+                code_examples: Vec::new(),
+                visual_aids: Vec::new(),
+                interactive_demos: Vec::new(),
+            },
+        ],
+        exercises: Vec::new(),
+        estimated_duration: std::time::Duration::from_secs(1800),
+        prerequisites: Vec::new(),
+    };
+    
+    ApiResponse::success(module)
+}
+
+/// Get concept details
+pub async fn get_concept(
+    State(_state): State<super::ui::AppState>,
+    Path(concept_id): Path<String>,
+) -> impl IntoResponse {
+    let concept = crate::learning::Concept {
+        id: concept_id,
+        name: "Sample Concept".to_string(),
+        explanation: "This is a sample concept explanation.".to_string(),
+        code_examples: Vec::new(),
+        visual_aids: Vec::new(),
+        interactive_demos: Vec::new(),
+    };
+    
+    ApiResponse::success(concept)
+}
+
+/// Get learning progress
+pub async fn get_learning_progress(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let progress = crate::learning::LearningAnalytics {
+        student_id: "student-1".to_string(),
+        session_data: Vec::new(),
+        concept_mastery: std::collections::HashMap::new(),
+        learning_velocity: 0.0,
+        struggle_patterns: Vec::new(),
+        recommended_next_concepts: Vec::new(),
+    };
+    
+    ApiResponse::success(progress)
+}
+
+/// Update learning progress
+pub async fn update_learning_progress(
+    State(_state): State<super::ui::AppState>,
+    Json(progress): Json<std::collections::HashMap<String, crate::learning::ProgressMetrics>>,
+) -> impl IntoResponse {
+    info!("Learning progress updated for {} concepts", progress.len());
+    
+    // In real implementation, save to database
+    ApiResponse::success("Progress updated successfully")
+}
+
+/// AI Tutor chat
+pub async fn tutor_chat(
+    State(state): State<super::ui::AppState>,
+    Json(request): Json<AIChatRequest>,
+) -> impl IntoResponse {
+    let ai_engine = state.ide.ai_engine();
+    
+    // Create AI completion request with learning context
+    let completion_request = crate::ai::CompletionRequest {
+        prompt: format!("[LEARNING TUTOR] {}", request.message),
+        context: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
+        language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
+        max_tokens: request.settings.and_then(|s| s.max_tokens),
+    };
+    
+    match ai_engine.generate_completion(completion_request).await {
+        Ok(completion) => {
+            info!("AI tutor chat completed successfully");
+            ApiResponse::success(completion.text)
+        }
+        Err(e) => {
+            error!("AI tutor chat failed: {}", e);
+            ApiResponse::error(format!("AI tutor chat failed: {}", e))
+        }
+    }
+}
+
+/// Create code tour for a file
+pub async fn create_code_tour(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let file_path = request.get("file_path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    
+    if file_path.is_empty() {
+        return ApiResponse::error("File path is required".to_string());
+    }
+    
+    let tour = crate::learning::CodeTour {
+        id: format!("tour_{}", file_path),
+        file_path: std::path::PathBuf::from(file_path),
+        title: format!("Understanding {}", std::path::Path::new(file_path).file_name().unwrap_or_default().to_string_lossy()),
+        description: "Interactive code walkthrough with explanations".to_string(),
+        steps: vec![
+            crate::learning::CodeTourStep {
+                step_number: 1,
+                line_range: (1, 10),
+                title: "File Overview".to_string(),
+                explanation: "This file contains the main program logic. Let's explore it step by step.".to_string(),
+                highlighted_concepts: vec!["file_structure".to_string()],
+                visual_aids: Vec::new(),
+                interactive_elements: Vec::new(),
+            }
+        ],
+        prerequisites: Vec::new(),
+        estimated_duration: std::time::Duration::from_secs(300),
+    };
+    
+    ApiResponse::success(tour)
+}
+
+/// Get learning achievements
+pub async fn get_achievements(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let achievements = vec![
+        crate::learning::Achievement {
+            id: "first-function".to_string(),
+            title: "First Function".to_string(),
+            description: "Created your first function".to_string(),
+            icon: "🎯".to_string(),
+            earned_at: chrono::Utc::now(),
+            category: crate::learning::AchievementCategory::FirstSteps,
+        },
+        crate::learning::Achievement {
+            id: "debug-master".to_string(),
+            title: "Debug Master".to_string(),
+            description: "Fixed 10 bugs on your own".to_string(),
+            icon: "🐛".to_string(),
+            earned_at: chrono::Utc::now(),
+            category: crate::learning::AchievementCategory::Debugging,
+        },
+    ];
+    
+    ApiResponse::success(achievements)
 }

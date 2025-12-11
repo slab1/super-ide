@@ -12,6 +12,7 @@ pub mod config;
 pub mod utils;
 pub mod terminal;
 pub mod external;
+pub mod learning;
 
 // Re-export main components
 pub use core::{SuperIDE, IdeResult, IdeError};
@@ -19,6 +20,17 @@ pub use ai::{AiEngine, AiConfig};
 pub use editor::{Editor};
 pub use config::{Configuration};
 pub use terminal::{TerminalManager, TerminalSession, CommandExecutor, TerminalConfig, TerminalError};
+pub use learning::{
+    LearningEngine, 
+    AITutor, 
+    StudentProfile, 
+    LearningModule, 
+    CodeTour, 
+    LearningPath,
+    LearningStyle,
+    SkillLevel,
+    ProgressMetrics
+};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

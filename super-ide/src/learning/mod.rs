@@ -282,6 +282,34 @@ pub struct AITutor {
     pub interaction_history: Vec<TutorInteraction>,
 }
 
+impl AITutor {
+    /// Generate contextual help for the student
+    pub async fn generate_help(&mut self, code_analysis: &CodeAnalysis, student_profile: &StudentProfile) -> Result<ContextualHelp, Box<dyn std::error::Error>> {
+        // Simulate AI help generation
+        let help_text = format!(
+            "Based on your current code, I can see you're working with {} concepts. \
+             Your learning style is {} and you're at a {} level. \
+             Here's some guidance to help you understand this better.",
+            code_analysis.potential_concepts.join(", "),
+            format!("{:?}", student_profile.learning_style).to_lowercase(),
+            format!("{:?}", student_profile.current_level).to_lowercase()
+        );
+
+        Ok(ContextualHelp {
+            title: "Contextual Help".to_string(),
+            explanation: help_text,
+            code_example: None,
+            related_concepts: code_analysis.recommended_concepts.clone(),
+            visual_aids: Vec::new(),
+            suggested_actions: vec![
+                "Show me an example".to_string(),
+                "Explain in detail".to_string(),
+                "Give me a hint".to_string(),
+            ],
+        })
+    }
+}
+
 /// AI tutor personality types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TutorPersonality {
@@ -379,7 +407,7 @@ impl LearningEngine {
         let session_config = self.adaptive_engine.create_session_config(&student_profile, module_id).await?;
         
         // Load learning content
-        let learning_module = self.content_manager.load_module(module_id).await?;
+        let _learning_module = self.content_manager.load_module(module_id).await?;
         
         Ok(LearningSession {
             student_id: student_id.to_string(),
@@ -425,7 +453,7 @@ impl LearningEngine {
     }
 
     /// Analyze code for learning context
-    async fn analyze_code_context(&self, code: &str, position: usize) -> Result<CodeAnalysis, Box<dyn std::error::Error>> {
+    async fn analyze_code_context(&self, _code: &str, _position: usize) -> Result<CodeAnalysis, Box<dyn std::error::Error>> {
         // Parse code to identify:
         // - Current function/method
         // - Variables in scope
@@ -442,7 +470,7 @@ impl LearningEngine {
     }
 
     /// Generate learning-focused tour steps
-    async fn generate_tour_steps(&self, code: &str, student_level: SkillLevel) -> Result<Vec<CodeTourStep>, Box<dyn std::error::Error>> {
+    async fn generate_tour_steps(&self, _code: &str, _student_level: SkillLevel) -> Result<Vec<CodeTourStep>, Box<dyn std::error::Error>> {
         // Parse code structure
         // Identify learning opportunities
         // Create progressive explanations
@@ -544,7 +572,7 @@ impl AdaptiveLearningEngine {
         Self
     }
     
-    pub async fn create_session_config(&self, student: &StudentProfile, module_id: &str) -> Result<SessionConfiguration, Box<dyn std::error::Error>> {
+    pub async fn create_session_config(&self, student: &StudentProfile, _module_id: &str) -> Result<SessionConfiguration, Box<dyn std::error::Error>> {
         Ok(SessionConfiguration {
             hint_frequency: student.preferences.hint_frequency.clone(),
             difficulty_level: student.preferences.difficulty_preference,
