@@ -6,10 +6,9 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // Import Configuration types for conversion
-use crate::config::{Configuration, AISettings, AIProvider};
+use crate::config::{Configuration, AIProvider};
 
 /// AI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +51,9 @@ pub struct FunctionInfo {
     pub return_type: Option<String>,
     pub line_start: usize,
     pub line_end: usize,
+    pub complexity: Option<f32>,
+    pub signature: Option<String>,
+    pub docstring: Option<String>,
 }
 
 /// Variable information for code analysis
@@ -61,6 +63,10 @@ pub struct VariableInfo {
     pub variable_type: VariableType,
     pub line: usize,
     pub column: usize,
+    pub scope: Option<String>,
+    pub is_declared: Option<bool>,
+    pub var_type: Option<String>,
+    pub is_mutable: Option<bool>,
 }
 
 /// Variable types
@@ -78,6 +84,11 @@ pub struct CodeComplexity {
     pub cyclomatic_complexity: u32,
     pub cognitive_complexity: u32,
     pub lines_of_code: usize,
+    pub maintainability_index: Option<f32>,
+    pub nested_depth: Option<u32>,
+    pub line_count: Option<u32>,
+    pub function_count: Option<u32>,
+    pub complexity_score: Option<f32>,
 }
 
 /// Issue severity levels
@@ -87,6 +98,17 @@ pub enum IssueSeverity {
     Warning,
     Error,
     Critical,
+}
+
+impl std::fmt::Display for IssueSeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IssueSeverity::Info => write!(f, "Info"),
+            IssueSeverity::Warning => write!(f, "Warning"),
+            IssueSeverity::Error => write!(f, "Error"),
+            IssueSeverity::Critical => write!(f, "Critical"),
+        }
+    }
 }
 
 /// Code issue found during analysis
@@ -146,6 +168,8 @@ pub struct UserFeedback {
     pub accepted: bool,
     pub rating: i32,
     pub context: String,
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub feedback_type: Option<String>,
 }
 
 /// Code suggestion
@@ -154,6 +178,7 @@ pub struct CodeSuggestion {
     pub id: String,
     pub title: String,
     pub description: String,
+    pub message: String,
     pub code: String,
     pub confidence: f32,
 }
@@ -214,8 +239,13 @@ impl AiEngine {
     }
 
     /// Check if AI provider is available
-    pub async fn ai_provider(&self) -> Result<bool> {
-        Ok(self.initialized)
+    pub async fn ai_provider(&self) -> Result<String> {
+        Ok(self.config.provider.clone())
+    }
+
+    /// Generate code completion (alias for generate_completion)
+    pub async fn complete_code(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        self.generate_completion(request).await
     }
 
     /// Check if AI is available
@@ -243,6 +273,14 @@ impl RefactoringEngine {
     pub fn new() -> Self {
         Self
     }
+
+    pub async fn analyze_for_refactoring(&self, _code: &str, _language: &str) -> Result<AnalysisResult> {
+        Ok(AnalysisResult {
+            issues: vec![],
+            suggestions: vec!["Consider extracting this function".to_string()],
+            complexity_score: 0.7,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -252,6 +290,14 @@ impl PerformanceAnalyzer {
     pub fn new() -> Self {
         Self
     }
+
+    pub fn get_performance_insights(&self, _code: &str, _language: &str) -> Result<AnalysisResult> {
+        Ok(AnalysisResult {
+            issues: vec![],
+            suggestions: vec!["Consider optimizing this loop".to_string()],
+            complexity_score: 0.6,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -260,5 +306,13 @@ pub struct SecurityAnalyzer;
 impl SecurityAnalyzer {
     pub fn new() -> Self {
         Self
+    }
+
+    pub fn analyze_code_security(&self, _code: &str, _language: &str) -> Result<AnalysisResult> {
+        Ok(AnalysisResult {
+            issues: vec![],
+            suggestions: vec!["Consider input validation".to_string()],
+            complexity_score: 0.8,
+        })
     }
 }

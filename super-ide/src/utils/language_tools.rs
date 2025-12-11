@@ -89,12 +89,12 @@ impl LanguageTools {
         CodeComplexity {
             cyclomatic_complexity: cyclomatic,
             cognitive_complexity: cognitive,
-            maintainability_index,
-            lines_of_code: lines_of_code as u32,
-            nested_depth: max_depth,
-            line_count: lines_of_code as u32,
-            function_count: 1, // Simplified: assume one function for demo
-            complexity_score: cyclomatic as f32, // Simplified calculation
+            lines_of_code,
+            maintainability_index: Some(maintainability_index),
+            nested_depth: Some(max_depth),
+            line_count: Some(lines_of_code as u32),
+            function_count: Some(1), // Simplified: assume one function for demo
+            complexity_score: Some(cyclomatic as f32), // Simplified calculation
         }
     }
     
@@ -116,7 +116,7 @@ impl LanguageTools {
                         line_end: 10, // Simplified: would extract from node position
                         parameters: vec![], // Would extract from signature
                         return_type: Some("void".to_string()), // Simplified: would parse return type
-                        complexity: 1.0, // Would calculate from body
+                        complexity: Some(1.0), // Would calculate from body
                         signature: Some(signature),
                         docstring: None, // Would extract from comments
                     });
@@ -147,11 +147,11 @@ impl LanguageTools {
                         name,
                         line: 1, // Simplified: would extract from node position
                         column: 1, // Simplified: would extract from node position
-                        scope: "local".to_string(),
                         variable_type: crate::ai::VariableType::Local,
-                        is_declared: true,
+                        scope: Some("local".to_string()),
+                        is_declared: Some(true),
                         var_type: Some("unknown".to_string()),
-                        is_mutable: node_type.contains("mut") || node_type.contains("var"),
+                        is_mutable: Some(node_type.contains("mut") || node_type.contains("var")),
                     });
                 }
             },
