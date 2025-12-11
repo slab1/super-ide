@@ -140,3 +140,128 @@ export interface ShortcutCategory {
   description: string
   shortcuts: KeyboardShortcut[]
 }
+
+// Collaboration types
+export interface Collaborator {
+  id: string
+  name: string
+  email: string
+  avatar?: string
+  cursor?: {
+    lineNumber: number
+    column: number
+    filePath: string
+  }
+  selection?: {
+    startLineNumber: number
+    startColumn: number
+    endLineNumber: number
+    endColumn: number
+  }
+  status: 'online' | 'away' | 'offline'
+  joinedAt: Date
+  color: string
+}
+
+export interface CollaborationSession {
+  id: string
+  name: string
+  description?: string
+  creator: string
+  collaborators: Collaborator[]
+  files: string[]
+  isPublic: boolean
+  shareUrl?: string
+  createdAt: Date
+  lastActivity: Date
+  status: 'active' | 'paused' | 'ended'
+}
+
+export interface CodeComment {
+  id: string
+  filePath: string
+  lineNumber: number
+  content: string
+  author: Collaborator
+  createdAt: Date
+  updatedAt?: Date
+  replies: CommentReply[]
+  resolved: boolean
+  tags: string[]
+  priority: 'low' | 'normal' | 'high'
+}
+
+export interface CommentReply {
+  id: string
+  content: string
+  author: Collaborator
+  createdAt: Date
+}
+
+export interface ShareableLink {
+  id: string
+  title: string
+  description?: string
+  code: string
+  language: string
+  syntaxHighlighted: boolean
+  isPublic: boolean
+  expiresAt?: Date
+  password?: string
+  viewCount: number
+  createdBy: string
+  createdAt: Date
+  shareUrl: string
+}
+
+export interface MergeConflict {
+  id: string
+  filePath: string
+  conflicts: ConflictSegment[]
+  baseContent: string
+  ourContent: string
+  theirContent: string
+  resolved: boolean
+  resolution?: ConflictResolution
+}
+
+export interface ConflictSegment {
+  startLine: number
+  endLine: number
+  content: string
+  type: 'ours' | 'theirs' | 'base'
+}
+
+export interface ConflictResolution {
+  resolvedContent: string
+  resolvedBy: string
+  strategy: 'ours' | 'theirs' | 'manual' | 'ai-suggested'
+  timestamp: Date
+}
+
+export interface LivePreview {
+  id: string
+  name: string
+  url: string
+  isPublic: boolean
+  collaborators: Collaborator[]
+  createdBy: string
+  createdAt: Date
+  lastActivity: Date
+  status: 'running' | 'stopped' | 'error'
+}
+
+export interface CollaborationEvent {
+  type: 'cursor_move' | 'selection_change' | 'code_edit' | 'file_open' | 'file_close' | 'user_join' | 'user_leave' | 'comment_add' | 'comment_resolve'
+  sessionId: string
+  userId: string
+  timestamp: Date
+  data: any
+}
+
+export interface WebSocketMessage {
+  type: 'collaboration_event' | 'cursor_update' | 'code_change' | 'user_presence' | 'comment_update' | 'heartbeat'
+  sessionId?: string
+  payload: any
+  timestamp: Date
+}
