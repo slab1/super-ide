@@ -490,6 +490,7 @@ impl Editor {
             prompt: format!("Complete code in {}: {}", context.language, context.text_before_cursor),
             context: context.text_before_cursor.clone(),
             language: context.language.clone(),
+            position: None,
             max_tokens: Some(50),
         };
 

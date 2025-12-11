@@ -478,7 +478,7 @@ pub async fn smart_completions(
         prompt: format!("Provide context-aware completions for file: {}", file_path),
         context: content.to_string(),
         language: get_language_from_file_path(file_path),
-        max_tokens: Some(200),
+            max_tokens: Some(200),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -565,7 +565,7 @@ pub async fn debug_assistance(
         prompt,
         context: code.to_string(),
         language: language.to_string(),
-        max_tokens: Some(1000),
+            max_tokens: Some(1000),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -637,7 +637,7 @@ pub async fn context_help(
         prompt,
         context: context_info,
         language: "rust".to_string(),
-        max_tokens: Some(800),
+            max_tokens: Some(800),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -701,7 +701,7 @@ pub async fn optimize_advanced(
         prompt,
         context: code.to_string(),
         language: language.to_string(),
-        max_tokens: Some(1500),
+            max_tokens: Some(1500),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -800,7 +800,7 @@ pub async fn generate_tests_advanced(
         prompt,
         context: code.to_string(),
         language: language.to_string(),
-        max_tokens: Some(2000),
+            max_tokens: Some(2000),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -904,7 +904,7 @@ pub async fn translate_languages(
         prompt,
         context: code.to_string(),
         language: from_language.to_string(),
-        max_tokens: Some(2000),
+            max_tokens: Some(2000),
     };
     
     match ai_engine.complete_code(completion_request).await {
