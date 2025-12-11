@@ -887,6 +887,17 @@ pub enum IssueSeverity {
     Critical,
 }
 
+impl std::fmt::Display for IssueSeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IssueSeverity::Info => write!(f, "Info"),
+            IssueSeverity::Warning => write!(f, "Warning"),
+            IssueSeverity::Error => write!(f, "Error"),
+            IssueSeverity::Critical => write!(f, "Critical"),
+        }
+    }
+}
+
 /// Code suggestion
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeSuggestion {
@@ -4456,6 +4467,29 @@ impl SecurityAnalyzer {
         analyzer
     }
 
+    /// Analyze code for security vulnerabilities
+    pub fn analyze_code_security(&self, code: &str, language: &str) -> Vec<CodeIssue> {
+        let mut issues = Vec::new();
+        
+        match language {
+            "javascript" | "typescript" => {
+                issues.extend(self.analyze_js_security(code));
+            }
+            "python" => {
+                issues.extend(self.analyze_python_security(code));
+            }
+            "rust" => {
+                issues.extend(self.analyze_rust_security(code));
+            }
+            _ => {
+                // Generic security analysis
+                issues.extend(self.analyze_generic_security(code));
+            }
+        }
+        
+        issues
+    }
+
     /// Initialize common vulnerability patterns
     fn initialize_vulnerability_patterns(&mut self) {
         // SQL Injection patterns
@@ -4969,7 +5003,58 @@ impl SecurityAnalyzer {
 
         issues
     }
+
+    /// Generic security analysis for unsupported languages
+    fn analyze_generic_security(&self, code: &str) -> Vec<CodeIssue> {
+        let mut issues = Vec::new();
+        let lines: Vec<&str> = code.lines().collect();
+
+        for (line_num, line) in lines.iter().enumerate() {
+            // Check for common security issues across all languages
+            
+            // Hardcoded credentials patterns
+            if line.contains("password") || line.contains("api_key") || line.contains("secret") {
+                if line.contains("=") && (line.contains("\"") || line.contains("'")) {
+                    issues.push(CodeIssue {
+                        id: Uuid::new_v4().to_string(),
+                        severity: IssueSeverity::Error,
+                        message: "Potential hardcoded credential detected".to_string(),
+                        line: line_num as u32 + 1,
+                        column: 1,
+                    });
+                }
+            }
+
+            // Command injection patterns
+            if line.contains("system(") || line.contains("exec(") || line.contains("eval(") {
+                issues.push(CodeIssue {
+                    id: Uuid::new_v4().to_string(),
+                    severity: IssueSeverity::Critical,
+                    message: "Potential command injection vulnerability - avoid dynamic command execution".to_string(),
+                    line: line_num as u32 + 1,
+                    column: 1,
+                });
+            }
+
+            // File path traversal
+            if line.contains("../") || line.contains("..\\") {
+                issues.push(CodeIssue {
+                    id: Uuid::new_v4().to_string(),
+                    severity: IssueSeverity::Error,
+                    message: "Potential path traversal vulnerability detected".to_string(),
+                    line: line_num as u32 + 1,
+                    column: 1,
+                });
+            }
+
+            // TODO: Add more generic security patterns
+        }
+
+        issues
+    }
 }
+
+
 
 impl Default for SecurityAnalyzer {
     fn default() -> Self {

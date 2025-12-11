@@ -78,6 +78,9 @@ onMounted(async () => {
 
   // Set up AI completion provider
   setupAICompletions()
+  
+  // Set up advanced AI features
+  setupAdvancedAI()
 })
 
 onUnmounted(() => {
@@ -91,6 +94,7 @@ watch(() => props.file, async () => {
   if (editor) {
     await loadFileContent()
     setupAICompletions()
+    setupAdvancedAI()
   }
 })
 
@@ -173,7 +177,7 @@ function setupAICompletions() {
         }
 
         // Get AI suggestions
-        const suggestions = await aiStore.getCompletions(
+        const suggestions = await aiStore.getSmartCompletions(
           props.file.path,
           model.getValue(),
           position
@@ -196,6 +200,150 @@ function setupAICompletions() {
   editor.onDidDispose(() => {
     disposable.dispose()
   })
+}
+
+function setupAdvancedAI() {
+  if (!editor) return
+
+  // Set up AI-powered hover provider
+  monaco.languages.registerHoverProvider('*', {
+    provideHover: async (model, position) => {
+      try {
+        const word = model.getWordAtPosition(position)
+        if (!word) return null
+
+        const content = model.getValue()
+        const language = getLanguageFromFileName(props.file.name)
+
+        // Get contextual help from AI
+        const help = await aiStore.getContextAwareHelp(
+          `Explain the ${word.word} syntax or concept in ${language}`,
+          {
+            filePath: props.file.path,
+            fileContent: content,
+            language,
+            cursorPosition: position
+          }
+        )
+
+        if (help && help.length > 0) {
+          return {
+            range: new monaco.Range(
+              position.lineNumber,
+              word.startColumn,
+              position.lineNumber,
+              word.endColumn
+            ),
+            contents: [
+              { value: `**${word.word}** - ${help[0].content}` }
+            ]
+          }
+        }
+      } catch (error) {
+        console.error('Failed to get AI hover help:', error)
+      }
+      return null
+    }
+  })
+
+  // Set up AI-powered diagnostics
+  editor.onDidChangeModelContent(async () => {
+    try {
+      const content = editor?.getValue() || ''
+      const language = getLanguageFromFileName(props.file.name)
+
+      // Get AI code review
+      const review = await aiStore.getCodeReview(content, language)
+      
+      if (review && review.length > 0) {
+        // Clear previous AI diagnostics
+        const markers = monaco.editor.getModelMarkers({})
+        const aiMarkers = markers.filter(marker => 
+          marker.source === 'AI Assistant' || 
+          marker.code?.includes('AI')
+        )
+        aiMarkers.forEach(marker => monaco.editor.setModelMarkers(
+          editor!.getModel()!,
+          'AI Assistant',
+          []
+        ))
+
+        // Add new AI diagnostics
+        const newMarkers = review.map((issue: any) => ({
+          severity: getMonacoSeverity(issue.severity),
+          message: issue.title,
+          startLineNumber: issue.line || 1,
+          startColumn: 1,
+          endLineNumber: issue.line || 1,
+          endColumn: 1000,
+          source: 'AI Assistant',
+          code: `AI-${issue.id}`,
+          relatedInformation: [
+            {
+              startLineNumber: issue.line || 1,
+              startColumn: 1,
+              endLineNumber: issue.line || 1,
+              endColumn: 1000,
+              message: issue.description
+            }
+          ]
+        }))
+
+        monaco.editor.setModelMarkers(
+          editor!.getModel()!,
+          'AI Assistant',
+          newMarkers
+        )
+      }
+    } catch (error) {
+      console.error('Failed to get AI diagnostics:', error)
+    }
+  })
+
+  // Set up AI-powered code actions
+  monaco.languages.registerCodeActionProvider('*', {
+    provideCodeActions: async (model, range, context, token) => {
+      try {
+        const content = model.getValue()
+        const language = getLanguageFromFileName(props.file.name)
+
+        // Get refactoring suggestions from AI
+        const suggestions = await aiStore.getRefactoringSuggestions(content, language)
+        
+        const actions = suggestions
+          .filter((s: any) => s.canAutoFix)
+          .map((suggestion: any) => ({
+            title: `AI: ${suggestion.title}`,
+            kind: monaco.languages.CodeActionKind.Refactor,
+            edit: {
+              edits: [{
+                range: range,
+                text: suggestion.suggestedRefactoring || ''
+              }]
+            },
+            isPreferred: suggestion.confidence > 0.8
+          }))
+
+        return { actions }
+      } catch (error) {
+        console.error('Failed to get AI code actions:', error)
+        return { actions: [] }
+      }
+    }
+  })
+}
+
+function getMonacoSeverity(severity: string): monaco.MarkerSeverity {
+  switch (severity.toLowerCase()) {
+    case 'error':
+      return monaco.MarkerSeverity.Error
+    case 'warning':
+      return monaco.MarkerSeverity.Warning
+    case 'info':
+      return monaco.MarkerSeverity.Info
+    default:
+      return monaco.MarkerSeverity.Info
+  }
 }
 </script>
 

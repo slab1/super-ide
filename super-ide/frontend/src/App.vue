@@ -43,12 +43,12 @@
             :class="[
               'flex-1 px-3 py-2 rounded text-sm font-medium transition-colors',
               activePanel === 'ai'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-purple-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             ]"
           >
-            <MessageCircle class="w-4 h-4 inline mr-2" />
-            AI Assistant
+            <Brain class="w-4 h-4 inline mr-2" />
+            Advanced AI
           </button>
           <button
             @click="activePanel = 'learning'"
@@ -67,7 +67,7 @@
       
       <!-- Panel Content -->
       <div class="flex-1 overflow-hidden">
-        <AIAssistant v-if="activePanel === 'ai'" class="h-full" />
+        <AdvancedAIAssistant v-if="activePanel === 'ai'" class="h-full" />
         <LearningPanel 
           v-if="activePanel === 'learning'" 
           class="h-full"
@@ -82,11 +82,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileCode, MessageCircle, GraduationCap } from 'lucide-vue-next'
+import { FileCode, Brain, GraduationCap } from 'lucide-vue-next'
 import FileExplorer from './components/FileExplorer.vue'
 import CodeEditor from './components/CodeEditor.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
-import AIAssistant from './components/AIAssistant.vue'
+import AdvancedAIAssistant from './components/AdvancedAIAssistant.vue'
 import LearningPanel from './components/LearningPanel.vue'
 import Toolbar from './components/Toolbar.vue'
 import type { FileInfo } from './types'
