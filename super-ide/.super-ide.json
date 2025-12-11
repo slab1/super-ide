@@ -1,0 +1,79 @@
+{
+  "ide": {
+    "workspace_path": "./workspace",
+    "auto_save_interval": 30,
+    "max_recent_files": 50,
+    "enable_telemetry": false,
+    "crash_reporting": false,
+    "update_check": false,
+    "language": "en-US",
+    "timezone": "UTC"
+  },
+  "ai": {
+    "provider": "Local",
+    "model_path": "./models/placeholder",
+    "api_key": null,
+    "base_url": null,
+    "max_tokens": 2048,
+    "temperature": 0.7,
+    "enable_local_inference": true,
+    "cache_size": 128,
+    "custom_instructions": [],
+    "privacy_mode": true,
+    "learning_enabled": true
+  },
+  "editor": {
+    "font_family": "JetBrains Mono",
+    "font_size": 14,
+    "line_height": 1.5,
+    "tab_size": 4,
+    "insert_spaces": true,
+    "word_wrap": true,
+    "minimap_enabled": true,
+    "line_numbers": true,
+    "show_whitespace": false,
+    "auto_close_brackets": true,
+    "auto_indent": true,
+    "format_on_save": true,
+    "enable_live_linting": true,
+    "spell_check": false,
+    "code_folding": true,
+    "bracket_matching": true,
+    "highlight_selection": true,
+    "show_code_actions": true
+  },
+  "theme": {
+    "name": "Dark",
+    "dark_mode": true,
+    "primary_color": "#007acc",
+    "accent_color": "#4ec9b0",
+    "background_color": "#1e1e1e",
+    "foreground_color": "#ffffff",
+    "syntax_highlighting": {},
+    "custom_css": null
+  },
+  "collaboration": {
+    "enable_real_time": false,
+    "share_cursor_position": true,
+    "share_selections": true,
+    "max_collaborators": 10,
+    "server_url": null,
+    "enable_voice_chat": false,
+    "share_screenshots": false
+  },
+  "security": {
+    "scan_for_secrets": true,
+    "local_llm_only": false,
+    "encrypt_local_data": true,
+    "secure_delete": true,
+    "certificate_validation": true,
+    "trusted_domains": []
+  },
+  "plugins": {
+    "enabled": true,
+    "auto_update": true,
+    "marketplace_url": "https://plugins.super-ide.dev",
+    "trust_level": "Verified",
+    "custom_plugins": []
+  }
+}
