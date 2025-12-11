@@ -366,7 +366,6 @@ pub async fn forward_terminal_output(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::extract::ws::Message;
 
     #[tokio::test]
     async fn test_terminal_message_serialization() {
@@ -380,7 +379,7 @@ mod tests {
         let parsed: TerminalMessage = serde_json::from_str(&json).unwrap();
         
         match parsed {
-            TerminalMessage::CreateSession { session_id, shell: _, cwd: _ } => {
+            TerminalMessage::CreateSession { session_id: _, shell, cwd } => {
                 assert_eq!(shell, Some("bash".to_string()));
                 assert_eq!(cwd, Some("/home/user".to_string()));
             }

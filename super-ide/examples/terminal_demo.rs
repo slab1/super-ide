@@ -1,6 +1,5 @@
 use super_ide::core::SuperIDE;
-use super_ide::terminal::{TerminalManager, CommandExecutor};
-use std::sync::Arc;
+use super_ide::config::Configuration;
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -9,7 +8,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("====================================================");
 
     // Initialize the SuperIDE with terminal support
-    let ide = SuperIDE::new().await?;
+    let config = Configuration::default();
+    let ide = SuperIDE::new(config).await?;
     println!("✅ SuperIDE initialized successfully");
 
     // Test 1: Basic Command Execution (echo)
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Command: echo 'Hello World from SuperIDE Terminal!'");
             println!("Exit Code: {}", result.exit_code);
             println!("Output:");
-            println!("{}", result.output);
+            println!("{}", result.stdout);
             if !result.stderr.is_empty() {
                 println!("Error Output:");
                 println!("{}", result.stderr);
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Command: ls -la");
             println!("Exit Code: {}", result.exit_code);
             println!("Output:");
-            println!("{}", result.output);
+            println!("{}", result.stdout);
             if !result.stderr.is_empty() {
                 println!("Error Output:");
                 println!("{}", result.stderr);
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Command: cargo --version");
             println!("Exit Code: {}", result.exit_code);
             println!("Output:");
-            println!("{}", result.output);
+            println!("{}", result.stdout);
             if !result.stderr.is_empty() {
                 println!("Error Output:");
                 println!("{}", result.stderr);
@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(result) => {
                 println!("\n--- Command: {} ---", cmd);
                 println!("Exit Code: {}", result.exit_code);
-                println!("Output: {}", result.output.trim());
+                println!("Output: {}", result.stdout.trim());
                 if !result.stderr.is_empty() {
                     println!("Error: {}", result.stderr.trim());
                 }
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(result) => {
             println!("Command: this-command-does-not-exist-12345");
             println!("Exit Code: {}", result.exit_code);
-            println!("Output: {}", result.output);
+            println!("Output: {}", result.stdout);
             if !result.stderr.is_empty() {
                 println!("Error Output:");
                 println!("{}", result.stderr);
