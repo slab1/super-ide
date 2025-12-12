@@ -492,6 +492,8 @@ impl Editor {
             language: context.language.clone(),
             position: None,
             max_tokens: Some(50),
+            cursor_position: None,
+            text_before_cursor: context.text_before_cursor.clone(),
         };
 
         if let Ok(ai_response) = self.ai_engine.generate_completion(ai_request).await {

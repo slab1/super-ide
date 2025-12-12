@@ -34,7 +34,7 @@ pub struct OpenAIRequest {
     pub stream: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIMessage {
     pub role: String,
     pub content: String,
@@ -85,6 +85,7 @@ impl From<Configuration> for AiConfig {
             model_name: "default".to_string(), // Could be enhanced to use model_path
             temperature: config.ai.temperature,
             max_tokens: config.ai.max_tokens,
+            base_url: config.ai.base_url,
         }
     }
 }
@@ -398,6 +399,8 @@ pub struct CompletionRequest {
     pub position: Option<(usize, usize)>,
     pub prompt: String,
     pub max_tokens: Option<u32>,
+    pub cursor_position: Option<(usize, usize)>,
+    pub text_before_cursor: String,
 }
 
 /// User feedback for AI learning
@@ -445,8 +448,8 @@ impl AiEngine {
             config,
             initialized: false,
             http_client,
-            request_cache: Arc::new(RwLock::new(lru::LruCache::new(100))),
-            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(50))),
+            request_cache: Arc::new(RwLock::new(lru::LruCache::new(std::num::NonZero::new(100).unwrap()))),
+            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(std::num::NonZero::new(50).unwrap()))),
         }
     }
 
@@ -472,9 +475,9 @@ impl AiEngine {
         // Check cache first
         let cache_key = format!("{}:{}:{}", request.language, request.cursor_position.unwrap_or((0, 0)).0, request.text_before_cursor);
         {
-            let cache = self.request_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
-                return Ok(cached.clone());
+            let mut cache = self.request_cache.write().await;
+            if let Some(cached) = cache.get(&cache_key).cloned() {
+                return Ok(cached);
             }
         }
 
@@ -631,6 +634,11 @@ impl AiEngine {
                 issues: vec![],
                 suggestions: vec!["AI provider not supported".to_string()],
                 complexity_score: 0.5,
+                bug_predictions: vec![],
+                code_smells: vec![],
+                security_vulnerabilities: vec![],
+                performance_insights: vec![],
+                maintainability_score: 0.5,
             })
         }
     }
@@ -970,6 +978,10 @@ Code:
                         message: "Consider using ? operator instead of unwrap()".to_string(),
                         line: 1,
                         column: 1,
+                        file_path: None,
+                        rule_id: Some("unwrap_usage".to_string()),
+                        fix_suggestion: Some("Use ? operator for proper error handling".to_string()),
+                        documentation_url: Some("https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html".to_string()),
                     });
                 }
                 if code.contains("clone()") && code.contains("&") {

@@ -363,12 +363,15 @@ async fn get_ai_suggestion(
     let ai_engine = state.ide.ai_engine();
     
     let request = crate::ai::CompletionRequest {
+
         prompt: payload.context.clone(),
         context: payload.context,
         language: payload.language,
         max_tokens: None,
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.generate_completion(request).await {
         Ok(suggestion) => {

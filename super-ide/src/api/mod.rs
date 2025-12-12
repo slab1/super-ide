@@ -613,12 +613,15 @@ pub async fn ai_chat(
     
     // Create AI completion request
     let completion_request = crate::ai::CompletionRequest {
+
         prompt: request.message,
         context: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
         language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
         max_tokens: request.settings.and_then(|s| s.max_tokens),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.generate_completion(completion_request).await {
         Ok(completion) => {
@@ -780,12 +783,15 @@ pub async fn debug_assistance(
     };
     
     let completion_request = crate::ai::CompletionRequest {
+
         prompt,
         context: code.to_string(),
         language: language.to_string(),
         max_tokens: Some(1000),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.complete_code(completion_request).await {
         Ok(_completion) => {
@@ -853,12 +859,15 @@ pub async fn context_help(
     let prompt = format!("Provide helpful programming guidance for: {}\n\n{}", query, context_info);
     
     let completion_request = crate::ai::CompletionRequest {
+
         prompt,
         context: context_info,
         language: "rust".to_string(),
         max_tokens: Some(800),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.complete_code(completion_request).await {
         Ok(completion) => {
@@ -918,12 +927,15 @@ pub async fn optimize_advanced(
     );
     
     let completion_request = crate::ai::CompletionRequest {
+
         prompt,
         context: code.to_string(),
         language: language.to_string(),
         max_tokens: Some(1500),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.complete_code(completion_request).await {
         Ok(completion) => {
@@ -1018,12 +1030,15 @@ pub async fn generate_tests_advanced(
     );
     
     let completion_request = crate::ai::CompletionRequest {
+
         prompt,
         context: code.to_string(),
         language: language.to_string(),
         max_tokens: Some(2000),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.complete_code(completion_request).await {
         Ok(completion) => {
@@ -1150,12 +1165,15 @@ pub async fn translate_languages(
     );
     
     let completion_request = crate::ai::CompletionRequest {
+
         prompt,
         context: code.to_string(),
         language: from_language.to_string(),
         max_tokens: Some(2000),
-        position: None,
-    };
+        position: None,,
+            cursor_position: None,
+            text_before_cursor: String::new(),
+            };
     
     match ai_engine.complete_code(completion_request).await {
         Ok(completion) => {
@@ -1786,7 +1804,7 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct GitBranch {
+pub struct GitBranchInfo {
     pub name: String,
     pub commit: String,
     pub date: String,

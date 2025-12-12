@@ -560,6 +560,8 @@ impl SuperIDE {
             language: language.to_string(),
             position: None,
             max_tokens: Some(100),
+            cursor_position: None,
+            text_before_cursor: context.to_string(),
         };
 
         match self.ai_engine.generate_completion(request).await {
