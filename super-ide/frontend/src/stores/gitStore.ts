@@ -179,6 +179,148 @@ export const useGitStore = defineStore('git', {
       }
     },
 
+    // Additional git operations
+    async deleteBranch(branchName: string): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.delete<ApiResponse<string>>('/api/git/delete_branch', {
+          data: { branch_name: branchName }
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to delete branch')
+        }
+        
+        // Refresh branches after deletion
+        await this.getBranches()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to delete branch'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async getLog(): Promise<GitCommit[]> {
+      try {
+        const response = await axios.get<ApiResponse<GitCommit[]>>('/api/git/log')
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to get commit log')
+        }
+        
+        this.commits = response.data.data || []
+        return this.commits
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to get commit log'
+        throw error
+      }
+    },
+
+    // Stash operations
+    async stash(message?: string): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.post<ApiResponse<string>>('/api/git/stash', { 
+          message 
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to stash changes')
+        }
+        
+        // Refresh status after stash
+        await this.getStatus()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to stash changes'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async stashPop(index?: number): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.post<ApiResponse<string>>('/api/git/stash_pop', { 
+          index 
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to pop stash')
+        }
+        
+        // Refresh status after pop
+        await this.getStatus()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to pop stash'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async stashApply(index?: number): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.post<ApiResponse<string>>('/api/git/stash_apply', { 
+          index 
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to apply stash')
+        }
+        
+        // Refresh status after apply
+        await this.getStatus()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to apply stash'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async stashDrop(index?: number): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.post<ApiResponse<string>>('/api/git/stash_drop', { 
+          index 
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to drop stash')
+        }
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to drop stash'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async merge(branchName: string, noFF?: boolean): Promise<void> {
+      try {
+        this.isLoading = true
+        const response = await axios.post<ApiResponse<string>>('/api/git/merge', { 
+          branch_name: branchName,
+          no_ff: noFF 
+        })
+        
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'Failed to merge branch')
+        }
+        
+        // Refresh status after merge
+        await this.getStatus()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to merge branch'
+        throw error
+      } finally {
+        this.isLoading = false
+      }
+    },
+
     // Utility methods
     getStagedFiles() {
       return this.status?.staged_files || []
