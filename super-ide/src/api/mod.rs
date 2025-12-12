@@ -797,7 +797,7 @@ pub async fn generate_tests_advanced(
     
     let test_types_str: Vec<String> = test_types.iter()
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
-        .collect();
+        .collect();         
     
     let prompt = format!(
         "Generate comprehensive tests for this {} code. Test types: {:?}\n\nCode:\n{}\n\nProvide test files with proper assertions.",
