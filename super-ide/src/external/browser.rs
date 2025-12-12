@@ -8,10 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use log::debug;
-<<<<<<< HEAD
 use base64::Engine;
-=======
->>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
+
+
 
 /// Browser automation request types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,11 +154,9 @@ impl BrowserClient {
             if let Some(data) = response.data {
                 if let Some(base64_str) = data.as_str() {
                     // Assume the response contains base64 encoded image data
-<<<<<<< HEAD
-                    base64::engine::general_purpose::STANDARD.decode(base64_str)
-=======
+
                     base64::Engine::decode(&base64::engine::general_purpose::STANDARD, base64_str)
->>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
+
                         .map_err(|e| ExternalError::JsonError(format!("Invalid base64: {}", e)))
                 } else {
                     Err(ExternalError::BrowserError("Screenshot data is not a string".to_string()))
@@ -335,13 +332,9 @@ impl BrowserClient {
             .await
             .map_err(|e| ExternalError::HttpError(e.to_string()))?;
 
-<<<<<<< HEAD
-        if !response.status().is_success() {
-            let status = response.status();
-=======
         let status = response.status();
         if !status.is_success() {
->>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
+
             let error_text = response.text().await.unwrap_or_default();
             return Err(ExternalError::BrowserError(format!("HTTP {}: {}", status, error_text)));
         }

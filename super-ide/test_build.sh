@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simple compilation test for Super IDE
-cd /workspace/super-ide
+cd super-ide
 
 echo "Testing Super IDE compilation..."
 

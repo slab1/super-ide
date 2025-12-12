@@ -139,13 +139,9 @@ impl McpApiClient {
             .await
             .map_err(|e| ExternalError::HttpError(e.to_string()))?;
 
-<<<<<<< HEAD
-        if !response.status().is_success() {
-            let status = response.status();
-=======
         let status = response.status();
         if !status.is_success() {
->>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
+
             let error_text = response.text().await.unwrap_or_default();
             return Err(ExternalError::McpError(format!("HTTP {}: {}", status, error_text)));
         }
