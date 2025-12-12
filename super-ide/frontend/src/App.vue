@@ -37,7 +37,7 @@
     <div class="w-80 border-l border-gray-700 flex flex-col">
       <!-- Panel Toggle -->
       <div class="p-2 border-b border-gray-700 bg-gray-800">
-        <div class="grid grid-cols-2 gap-1">
+        <div class="grid grid-cols-3 gap-1">
           <button
             @click="activePanel = 'ai'"
             :class="[
@@ -49,6 +49,18 @@
           >
             <Brain class="w-3 h-3 inline mr-1" />
             AI
+          </button>
+          <button
+            @click="activePanel = 'git'"
+            :class="[
+              'px-2 py-2 rounded text-xs font-medium transition-colors',
+              activePanel === 'git'
+                ? 'bg-orange-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            ]"
+          >
+            <GitBranch class="w-3 h-3 inline mr-1" />
+            Git
           </button>
           <button
             @click="activePanel = 'snippets'"
@@ -79,7 +91,7 @@
             :class="[
               'px-2 py-2 rounded text-xs font-medium transition-colors',
               activePanel === 'collaboration'
-                ? 'bg-orange-600 text-white'
+                ? 'bg-teal-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             ]"
           >
@@ -91,7 +103,8 @@
       
       <!-- Panel Content -->
       <div class="flex-1 overflow-hidden">
-        <AdvancedAIAssistant v-if="activePanel === 'ai'" class="h-full" />
+        <AICodeIntelligencePanel v-if="activePanel === 'ai'" class="h-full" />
+        <GitPanel v-if="activePanel === 'git'" class="h-full" />
         <SmartSnippets v-if="activePanel === 'snippets'" class="h-full" />
         <LearningPanel 
           v-if="activePanel === 'learning'" 
@@ -108,35 +121,36 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileCode, Brain, GraduationCap, Code, Users } from 'lucide-vue-next'
+import { FileCode, Brain, GraduationCap, Code, GitBranch, Users } from 'lucide-vue-next'
 import FileExplorer from './components/FileExplorer.vue'
 import CodeEditor from './components/CodeEditor.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
-import AdvancedAIAssistant from './components/AdvancedAIAssistant.vue'
+import AICodeIntelligencePanel from './components/AICodeIntelligencePanel.vue'
+import GitPanel from './components/GitPanel.vue'
 import SmartSnippets from './components/SmartSnippets.vue'
 import LearningPanel from './components/LearningPanel.vue'
 import CollaborationPanel from './components/CollaborationPanel.vue'
 import Toolbar from './components/Toolbar.vue'
-import type { FileInfo } from './types'
+import type { FileTreeNode } from './types'
 
-const currentFile = ref<FileInfo | null>(null)
-const activePanel = ref<'ai' | 'snippets' | 'learning' | 'collaboration'>('ai')
+const currentFile = ref<FileTreeNode | null>(null)
+const activePanel = ref<'ai' | 'git' | 'snippets' | 'learning' | 'collaboration'>('ai')
 
-function onFileSelected(file: FileInfo) {
+function onFileSelected(file: FileTreeNode) {
   currentFile.value = file
 }
 
 function onContentChanged(content: string) {
   // Handle content changes - could save to backend
-  console.log('Content changed:', content)
+  // console.log('Content changed:', content)
 }
 
 function onLearningModeToggled(active: boolean) {
-  console.log('Learning mode toggled:', active)
+  // console.log('Learning mode toggled:', active)
 }
 
 function onHelpRequested(context: any) {
-  console.log('Help requested:', context)
+  // console.log('Help requested:', context)
   // Switch to AI panel when help is requested
   activePanel.value = 'ai'
 }

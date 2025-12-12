@@ -23,5 +23,21 @@ export default defineConfig({
   build: {
     outDir: '../src/ui/web/dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Monaco editor chunk
+          monaco: ['monaco-editor'],
+          // Vue ecosystem
+          vue: ['vue', 'pinia'],
+          // UI components
+          ui: ['lucide-vue-next'],
+          // HTTP client
+          http: ['axios'],
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+      },
+    },
   },
 })

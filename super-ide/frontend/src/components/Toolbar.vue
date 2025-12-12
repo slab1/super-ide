@@ -205,14 +205,14 @@ function toggleWordWrap() {
 
 function navigateToSegment(index: number) {
   // TODO: Navigate to parent directory
-  console.log('Navigate to segment:', index)
+  // console.log('Navigate to segment:', index)
 }
 
 async function showGitStatus() {
   try {
     const status = await gitStore.getStatus()
-    console.log('Git status:', status)
-    // TODO: Show git status panel
+    // TODO: Show git status panel or update UI
+    // console.log('Git status:', status)
   } catch (error) {
     console.error('Failed to get git status:', error)
   }

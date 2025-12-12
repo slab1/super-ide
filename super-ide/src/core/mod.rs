@@ -10,6 +10,7 @@ use crate::editor::Editor;
 use crate::config::Configuration;
 use crate::utils::event_bus::EventBus;
 use crate::terminal::{TerminalManager, TerminalConfig};
+use crate::collaboration::CollaborationManager;
 
 /// Document context information
 #[derive(Debug, Clone)]
@@ -22,7 +23,7 @@ struct DocumentContext {
 pub type IdeResult<T> = Result<T, IdeError>;
 
 /// Main IDE errors
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum IdeError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
@@ -66,6 +67,9 @@ pub struct SuperIDE {
     
     /// Terminal manager for command execution
     terminal_manager: Arc<TerminalManager>,
+    
+    /// Collaboration manager for real-time editing
+    collaboration_manager: Arc<CollaborationManager>,
     
     /// Application state
     state: Arc<RwLock<IdeState>>,
@@ -190,6 +194,7 @@ impl SuperIDE {
             command_timeout: tokio::time::Duration::from_secs(30),
         };
         let terminal_manager = Arc::new(TerminalManager::new(terminal_config));
+        let collaboration_manager = Arc::new(CollaborationManager::new());
         
         let state = IdeState {
             projects: Vec::new(),
@@ -204,6 +209,7 @@ impl SuperIDE {
             editor: Arc::new(Mutex::new(editor)),
             event_bus: Arc::new(event_bus),
             terminal_manager,
+            collaboration_manager,
             state: Arc::new(RwLock::new(state)),
         })
     }
@@ -211,6 +217,11 @@ impl SuperIDE {
     /// Get AI engine reference
     pub fn ai_engine(&self) -> &AiEngine {
         &self.ai_engine
+    }
+    
+    /// Get collaboration manager reference
+    pub fn collaboration_manager(&self) -> &Arc<CollaborationManager> {
+        &self.collaboration_manager
     }
     
     /// Get editor reference

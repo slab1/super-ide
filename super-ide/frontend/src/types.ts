@@ -1,10 +1,84 @@
 export interface FileInfo {
   path: string
   name: string
-  type: 'file' | 'directory'
-  size?: number
-  modified?: string
+  extension?: string
+  size: number
+  is_directory: boolean
+  created_at: string
+  modified_at: string
+  is_hidden: boolean
+  git_status?: FileGitStatus
   children?: FileInfo[]
+}
+
+export interface FileGitStatus {
+  status: string
+  staged: boolean
+  modified: boolean
+  untracked: boolean
+}
+
+export interface FileTreeNode {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  size: number
+  modified: string
+  children?: FileTreeNode[]
+}
+
+export interface FileOperationResult {
+  success: boolean
+  message: string
+  bytes_written?: number
+  lines_read?: number
+}
+
+export interface GitFile {
+  path: string
+  status: 'Added' | 'Modified' | 'Deleted' | 'Renamed' | 'Untracked'
+  added_lines?: number
+  removed_lines?: number
+}
+
+export interface GitStatus {
+  staged_files: GitFile[]
+  unstaged_files: GitFile[]
+  untracked_files: GitFile[]
+  ahead_count: number
+  behind_count: number
+}
+
+export interface GitBranch {
+  name: string
+  is_current: boolean
+  is_remote: boolean
+  ahead_count: number
+  behind_count: number
+}
+
+export interface GitCommit {
+  hash: string
+  message: string
+  author: string
+  email: string
+  timestamp: string
+  files_changed: string[]
+  insertions: number
+  deletions: number
+}
+
+export interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  timestamp: string
+}
+
+export interface SearchResult {
+  path: string
+  name: string
+  size: number
 }
 
 export interface CodeCompletion {

@@ -383,7 +383,7 @@ mod tests {
                 assert_eq!(shell, Some("bash".to_string()));
                 assert_eq!(cwd, Some("/home/user".to_string()));
             }
-            _ => panic!("Wrong message type parsed"),
+            _ => unreachable!("Unexpected message type parsed"),
         }
     }
 
@@ -403,7 +403,7 @@ mod tests {
                 assert_eq!(session_id, "test-session");
                 assert_eq!(success, true);
             }
-            _ => panic!("Wrong message type parsed"),
+            _ => unreachable!("Unexpected message type parsed"),
         }
     }
 }

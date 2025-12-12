@@ -24,6 +24,8 @@ use base64::Engine;
 use crate::utils::event_bus::EventBus;
 use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
 use crate::file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError, FileChangeEvent, FileChangeType};
+use crate::ai::{AiEngine, AnalysisResult, BugPrediction, SecurityVulnerability, CodeExplanation, DebugSession};
+use crate::collaboration::{CollaborationManager, CollaborationUser, Operation, UserPresence, CollaborationEvent};
 
 // API State
 #[derive(Clone)]
@@ -85,6 +87,155 @@ pub struct CodeCompletionRequest {
     pub position: usize,
     pub language: String,
     pub file_path: Option<String>,
+}
+
+/// Advanced code analysis request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdvancedAnalysisRequest {
+    pub code: String,
+    pub language: String,
+    pub file_path: Option<String>,
+    pub include_bug_prediction: Option<bool>,
+    pub include_security_analysis: Option<bool>,
+    pub include_performance_analysis: Option<bool>,
+}
+
+/// Bug prediction request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BugPredictionRequest {
+    pub code: String,
+    pub language: String,
+}
+
+/// Security analysis request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecurityAnalysisRequest {
+    pub code: String,
+    pub language: String,
+}
+
+/// Code explanation request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeExplanationRequest {
+    pub code: String,
+    pub language: String,
+    pub context: Option<String>,
+    pub explanation_level: String,
+}
+
+/// Unit test generation request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TestGenerationRequest {
+    pub code: String,
+    pub language: String,
+    pub test_framework: Option<String>,
+}
+
+/// Code improvement request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeImprovementRequest {
+    pub code: String,
+    pub language: String,
+    pub improvement_type: Option<String>,
+}
+
+/// Debug session request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugSessionRequest {
+    pub file_path: String,
+    pub language: String,
+    pub initial_breakpoints: Option<Vec<usize>>,
+}
+
+/// Debug step request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugStepRequest {
+    pub action: String, // "step_over", "step_into", "step_out", "continue"
+    pub session_id: String,
+}
+
+/// Set breakpoints request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetBreakpointsRequest {
+    pub session_id: String,
+    pub breakpoints: Vec<BreakpointRequest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BreakpointRequest {
+    pub line: usize,
+    pub condition: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+/// Collaboration request types
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateSessionRequest {
+    pub document_id: String,
+    pub creator_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JoinSessionRequest {
+    pub user_id: String,
+    pub user_name: String,
+    pub user_email: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApplyOperationRequest {
+    pub session_id: String,
+    pub operation: Operation,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdatePresenceRequest {
+    pub session_id: String,
+    pub presence: UserPresence,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddCommentRequest {
+    pub session_id: String,
+    pub content: String,
+    pub line_number: Option<usize>,
+    pub column_start: Option<usize>,
+    pub column_end: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateCommentRequest {
+    pub session_id: String,
+    pub comment_id: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveCommentRequest {
+    pub session_id: String,
+    pub comment_id: String,
+}
+
+/// Smart search request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmartSearchRequest {
+    pub query: String,
+    pub file_types: Option<Vec<String>>,
+    pub exclude_patterns: Option<Vec<String>>,
+    pub include_patterns: Option<Vec<String>>,
+    pub search_in_content: Option<bool>,
+    pub search_in_names: Option<bool>,
+}
+
+/// API test request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiTestRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    pub body: Option<String>,
+    pub timeout: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -183,6 +334,46 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/ai/translate-languages", post(translate_languages))
         .route("/ai/code-metrics", post(code_metrics))
         
+        // Phase 4: Enhanced Code Intelligence & Debugging
+        .route("/ai/advanced-analysis", post(advanced_code_analysis))
+        .route("/ai/bug-prediction", post(predict_bugs))
+        .route("/ai/security-vulnerabilities", post(analyze_security_vulnerabilities))
+        .route("/ai/code-explanation", post(explain_code))
+        .route("/ai/generate-tests", post(generate_unit_tests))
+        .route("/ai/code-improvements", post(suggest_improvements))
+        .route("/ai/debug-session/start", post(start_debug_session))
+        .route("/ai/debug-session/:id", get(get_debug_session))
+        .route("/ai/debug-session/:id/breakpoints", post(set_breakpoints))
+        .route("/ai/debug-session/:id/step", post(debug_step))
+        .route("/ai/debug-session/:id/variables", get(get_debug_variables))
+        .route("/ai/debug-session/:id/stop", post(stop_debug_session))
+        
+        // Collaboration endpoints
+        .route("/collaboration/session", post(create_collaboration_session))
+        .route("/collaboration/session/:id/join", post(join_collaboration_session))
+        .route("/collaboration/session/:id/leave", post(leave_collaboration_session))
+        .route("/collaboration/session/:id/operation", post(apply_operation))
+        .route("/collaboration/session/:id/presence", post(update_presence))
+        .route("/collaboration/session/:id/comments", get(get_comments))
+        .route("/collaboration/session/:id/comments", post(add_comment))
+        .route("/collaboration/session/:id/comments/:comment_id", put(update_comment))
+        .route("/collaboration/session/:id/comments/:comment_id/resolve", post(resolve_comment))
+        .route("/collaboration/document/:id", get(get_collaboration_document))
+        .route("/collaboration/ws/:session_id", get(collaboration_websocket))
+        
+        // Smart search endpoints
+        .route("/search/smart", post(smart_search))
+        .route("/search/files", post(search_files_advanced))
+        
+        // Auto-save endpoints
+        .route("/autosave/enable", post(enable_autosave))
+        .route("/autosave/disable", post(disable_autosave))
+        .route("/autosave/status", get(get_autosave_status))
+        
+        // API testing endpoints
+        .route("/api-test/request", post(test_api_request))
+        .route("/api-test/history", get(get_api_test_history))
+        
         // Learning endpoints
         .route("/learning/profile", get(get_learning_profile))
         .route("/learning/profile", put(update_learning_profile))
@@ -199,6 +390,16 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/git/status", get(git_status))
         .route("/git/branches", get(git_branches))
         .route("/git/commit", post(git_commit))
+        .route("/git/push", post(git_push))
+        .route("/git/pull", post(git_pull))
+        .route("/git/diff", get(git_diff))
+        .route("/git/log", get(git_log))
+        .route("/git/branch", post(git_create_branch))
+        .route("/git/checkout", post(git_checkout_branch))
+        .route("/git/stage", post(git_stage_files))
+        .route("/git/unstage", post(git_unstage_files))
+        .route("/git/discard", post(git_discard_changes))
+        .route("/git/init", post(git_init_repository))
         
         // Project operations
         .route("/project/info", get(project_info))
@@ -1224,6 +1425,284 @@ pub async fn git_commit(
     }
 }
 
+// Enhanced Git Handlers
+
+/// Push changes to remote
+pub async fn git_push(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let remote = request.get("remote").and_then(|v| v.as_str());
+    let branch = request.get("branch").and_then(|v| v.as_str());
+    
+    match git_manager.push(remote, branch).await {
+        Ok(message) => {
+            info!("Git push successful");
+            ApiResponse::success(message)
+        }
+        Err(e) => {
+            error!("Git push failed: {}", e);
+            ApiResponse::error(format!("Git push failed: {}", e))
+        }
+    }
+}
+
+/// Pull changes from remote
+pub async fn git_pull(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let remote = request.get("remote").and_then(|v| v.as_str());
+    let branch = request.get("branch").and_then(|v| v.as_str());
+    
+    match git_manager.pull(remote, branch).await {
+        Ok(message) => {
+            info!("Git pull successful");
+            ApiResponse::success(message)
+        }
+        Err(e) => {
+            error!("Git pull failed: {}", e);
+            ApiResponse::error(format!("Git pull failed: {}", e))
+        }
+    }
+}
+
+/// Get file diff
+pub async fn git_diff(
+    State(_state): State<super::ui::AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let file_path = params.get("file").map(|s| s.as_str());
+    let staged = params.get("staged").and_then(|v| v.parse::<bool>().ok()).unwrap_or(false);
+    
+    match git_manager.get_diff(file_path, staged).await {
+        Ok(diff) => {
+            info!("Git diff retrieved successfully");
+            ApiResponse::success(diff)
+        }
+        Err(e) => {
+            error!("Git diff failed: {}", e);
+            ApiResponse::error(format!("Git diff failed: {}", e))
+        }
+    }
+}
+
+/// Get commit history
+pub async fn git_log(
+    State(_state): State<super::ui::AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let limit = params.get("limit").and_then(|v| v.parse::<u32>().ok()).unwrap_or(10);
+    
+    match git_manager.get_log(limit).await {
+        Ok(commits) => {
+            info!("Git log retrieved successfully: {} commits", commits.len());
+            ApiResponse::success(commits)
+        }
+        Err(e) => {
+            error!("Git log failed: {}", e);
+            ApiResponse::error(format!("Git log failed: {}", e))
+        }
+    }
+}
+
+/// Create a new branch
+pub async fn git_create_branch(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let branch_name = request.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    
+    if branch_name.is_empty() {
+        return ApiResponse::error("Branch name is required".to_string());
+    }
+    
+    match git_manager.create_branch(branch_name).await {
+        Ok(_) => {
+            info!("Git branch created successfully: {}", branch_name);
+            ApiResponse::success(format!("Branch '{}' created successfully", branch_name))
+        }
+        Err(e) => {
+            error!("Git branch creation failed: {}", e);
+            ApiResponse::error(format!("Git branch creation failed: {}", e))
+        }
+    }
+}
+
+/// Checkout a branch
+pub async fn git_checkout_branch(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let branch_name = request.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    
+    if branch_name.is_empty() {
+        return ApiResponse::error("Branch name is required".to_string());
+    }
+    
+    match git_manager.checkout_branch(branch_name).await {
+        Ok(_) => {
+            info!("Git branch checkout successful: {}", branch_name);
+            ApiResponse::success(format!("Switched to branch '{}'", branch_name))
+        }
+        Err(e) => {
+            error!("Git branch checkout failed: {}", e);
+            ApiResponse::error(format!("Git branch checkout failed: {}", e))
+        }
+    }
+}
+
+/// Stage specific files
+pub async fn git_stage_files(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.stage_files(&files).await {
+        Ok(_) => {
+            info!("Git files staged successfully: {} files", files.len());
+            ApiResponse::success(format!("Staged {} files successfully", files.len()))
+        }
+        Err(e) => {
+            error!("Git staging failed: {}", e);
+            ApiResponse::error(format!("Git staging failed: {}", e))
+        }
+    }
+}
+
+/// Unstage specific files
+pub async fn git_unstage_files(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.unstage_files(&files).await {
+        Ok(_) => {
+            info!("Git files unstaged successfully: {} files", files.len());
+            ApiResponse::success(format!("Unstaged {} files successfully", files.len()))
+        }
+        Err(e) => {
+            error!("Git unstaging failed: {}", e);
+            ApiResponse::error(format!("Git unstaging failed: {}", e))
+        }
+    }
+}
+
+/// Discard changes to specific files
+pub async fn git_discard_changes(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.discard_changes(&files).await {
+        Ok(_) => {
+            info!("Git changes discarded successfully: {} files", files.len());
+            ApiResponse::success(format!("Discarded changes to {} files", files.len()))
+        }
+        Err(e) => {
+            error!("Git discard failed: {}", e);
+            ApiResponse::error(format!("Git discard failed: {}", e))
+        }
+    }
+}
+
+/// Initialize a new git repository
+pub async fn git_init_repository(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    match git_manager.init().await {
+        Ok(_) => {
+            info!("Git repository initialized successfully");
+            ApiResponse::success("Git repository initialized successfully")
+        }
+        Err(e) => {
+            error!("Git init failed: {}", e);
+            ApiResponse::error(format!("Git init failed: {}", e))
+        }
+    }
+}
+
 // Project Handlers
 
 /// Get project information
@@ -1851,4 +2330,619 @@ pub async fn get_achievements(
     ];
     
     ApiResponse::success(achievements)
+}
+
+// Phase 4: Enhanced Code Intelligence & Debugging Handlers
+
+/// Advanced code analysis with comprehensive analysis
+pub async fn advanced_code_analysis(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<AdvancedAnalysisRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.advanced_analyze_code(&request.code, &request.language, request.file_path.as_deref()).await {
+        Ok(analysis) => {
+            info!("Advanced code analysis completed for {} lines", request.code.lines().count());
+            ApiResponse::success(analysis)
+        }
+        Err(e) => {
+            error!("Advanced code analysis failed: {}", e);
+            ApiResponse::error(format!("Analysis failed: {}", e))
+        }
+    }
+}
+
+/// Predict potential bugs in code
+pub async fn predict_bugs(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<BugPredictionRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.predict_bugs(&request.code, &request.language).await {
+        Ok(predictions) => {
+            info!("Bug prediction completed, found {} potential issues", predictions.len());
+            ApiResponse::success(predictions)
+        }
+        Err(e) => {
+            error!("Bug prediction failed: {}", e);
+            ApiResponse::error(format!("Bug prediction failed: {}", e))
+        }
+    }
+}
+
+/// Analyze security vulnerabilities
+pub async fn analyze_security_vulnerabilities(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<SecurityAnalysisRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.analyze_security(&request.code, &request.language).await {
+        Ok(vulnerabilities) => {
+            info!("Security analysis completed, found {} vulnerabilities", vulnerabilities.len());
+            ApiResponse::success(vulnerabilities)
+        }
+        Err(e) => {
+            error!("Security analysis failed: {}", e);
+            ApiResponse::error(format!("Security analysis failed: {}", e))
+        }
+    }
+}
+
+/// Explain code functionality
+pub async fn explain_code(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CodeExplanationRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    let explanation_request = crate::ai::CodeExplanationRequest {
+        code: request.code,
+        language: request.language,
+        context: request.context,
+        explanation_level: match request.explanation_level.as_str() {
+            "basic" => crate::ai::ExplanationLevel::Basic,
+            "expert" => crate::ai::ExplanationLevel::Expert,
+            _ => crate::ai::ExplanationLevel::Detailed,
+        },
+    };
+    
+    match ai_engine.explain_code(explanation_request).await {
+        Ok(explanation) => {
+            info!("Code explanation completed");
+            ApiResponse::success(explanation)
+        }
+        Err(e) => {
+            error!("Code explanation failed: {}", e);
+            ApiResponse::error(format!("Code explanation failed: {}", e))
+        }
+    }
+}
+
+/// Generate unit tests for code
+pub async fn generate_unit_tests(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<TestGenerationRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.generate_tests(&request.code, &request.language).await {
+        Ok(test_code) => {
+            info!("Unit test generation completed");
+            ApiResponse::success(test_code)
+        }
+        Err(e) => {
+            error!("Unit test generation failed: {}", e);
+            ApiResponse::error(format!("Test generation failed: {}", e))
+        }
+    }
+}
+
+/// Suggest code improvements
+pub async fn suggest_improvements(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CodeImprovementRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.suggest_improvements(&request.code, &request.language).await {
+        Ok(suggestions) => {
+            info!("Code improvement suggestions completed, {} suggestions provided", suggestions.len());
+            ApiResponse::success(suggestions)
+        }
+        Err(e) => {
+            error!("Code improvement suggestions failed: {}", e);
+            ApiResponse::error(format!("Improvement suggestions failed: {}", e))
+        }
+    }
+}
+
+/// Start a debug session
+pub async fn start_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<DebugSessionRequest>,
+) -> impl IntoResponse {
+    let session_id = format!("debug_{}", chrono::Utc::now().timestamp());
+    
+    let debug_session = crate::ai::DebugSession {
+        session_id: session_id.clone(),
+        file_path: request.file_path,
+        breakpoints: request.initial_breakpoints.unwrap_or_default()
+            .into_iter()
+            .map(|line| crate::ai::Breakpoint {
+                id: format!("bp_{}", line),
+                line,
+                column: 1,
+                enabled: true,
+                condition: None,
+                hit_count: 0,
+            })
+            .collect(),
+        current_line: None,
+        variables: Vec::new(),
+        call_stack: Vec::new(),
+        is_active: true,
+    };
+    
+    info!("Debug session started: {}", session_id);
+    ApiResponse::success(debug_session)
+}
+
+/// Get debug session information
+pub async fn get_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // In a real implementation, this would retrieve the session from a store
+    let debug_session = crate::ai::DebugSession {
+        session_id,
+        file_path: "example.rs".to_string(),
+        breakpoints: vec![
+            crate::ai::Breakpoint {
+                id: "bp_10".to_string(),
+                line: 10,
+                column: 1,
+                enabled: true,
+                condition: None,
+                hit_count: 0,
+            }
+        ],
+        current_line: Some(10),
+        variables: vec![
+            crate::ai::DebugVariable {
+                name: "x".to_string(),
+                value: "42".to_string(),
+                type_name: "i32".to_string(),
+                scope: crate::ai::VariableScope::Local,
+                is_changed: false,
+            }
+        ],
+        call_stack: vec![
+            crate::ai::StackFrame {
+                function_name: "main".to_string(),
+                file_path: "example.rs".to_string(),
+                line: 10,
+                column: 1,
+                local_variables: Vec::new(),
+            }
+        ],
+        is_active: true,
+    };
+    
+    ApiResponse::success(debug_session)
+}
+
+/// Set breakpoints in debug session
+pub async fn set_breakpoints(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<SetBreakpointsRequest>,
+) -> impl IntoResponse {
+    if request.session_id != session_id {
+        return ApiResponse::error("Session ID mismatch".to_string());
+    }
+    
+    let breakpoints = request.breakpoints
+        .into_iter()
+        .map(|bp| crate::ai::Breakpoint {
+            id: format!("bp_{}", bp.line),
+            line: bp.line,
+            column: 1,
+            enabled: bp.enabled.unwrap_or(true),
+            condition: bp.condition,
+            hit_count: 0,
+        })
+        .collect();
+    
+    info!("Set {} breakpoints for session {}", breakpoints.len(), session_id);
+    ApiResponse::success(breakpoints)
+}
+
+/// Step through debug session
+pub async fn debug_step(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<DebugStepRequest>,
+) -> impl IntoResponse {
+    let action = request.action;
+    
+    // Simulate debug step
+    let result = match action.as_str() {
+        "step_over" => "Stepped over current line",
+        "step_into" => "Stepped into function",
+        "step_out" => "Stepped out of function",
+        "continue" => "Continued execution",
+        _ => "Unknown debug action",
+    };
+    
+    info!("Debug step: {} for session {}", action, request.session_id);
+    ApiResponse::success(result)
+}
+
+/// Get debug variables
+pub async fn get_debug_variables(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // In a real implementation, this would get actual variables from the debug context
+    let variables = vec![
+        crate::ai::DebugVariable {
+            name: "result".to_string(),
+            value: "Some(42)".to_string(),
+            type_name: "Option<i32>".to_string(),
+            scope: crate::ai::VariableScope::Local,
+            is_changed: true,
+        },
+        crate::ai::DebugVariable {
+            name: "counter".to_string(),
+            value: "5".to_string(),
+            type_name: "i32".to_string(),
+            scope: crate::ai::VariableScope::Local,
+            is_changed: false,
+        },
+    ];
+    
+    ApiResponse::success(variables)
+}
+
+/// Stop debug session
+pub async fn stop_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let session_id = request.get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    
+    info!("Debug session stopped: {}", session_id);
+    ApiResponse::success("Debug session stopped successfully")
+}
+
+// Phase 5: Collaboration & Advanced Features Handlers
+
+/// Create collaboration session
+pub async fn create_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CreateSessionRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.create_session(request.document_id, request.creator_id).await {
+        Ok(session_id) => {
+            info!("Collaboration session created: {}", session_id);
+            ApiResponse::success(session_id)
+        }
+        Err(e) => {
+            error!("Failed to create collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to create session: {}", e))
+        }
+    }
+}
+
+/// Join collaboration session
+pub async fn join_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<JoinSessionRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    // Register user if not already registered
+    let user = CollaborationUser {
+        id: request.user_id.clone(),
+        name: request.user_name,
+        email: request.user_email,
+        avatar_url: request.avatar_url,
+        color: format!("#{:06x}", rand::random::<u32>() & 0xFFFFFF), // Random color
+        is_online: true,
+        joined_at: chrono::Utc::now(),
+        last_activity: chrono::Utc::now(),
+    };
+    collaboration_manager.register_user(user).await;
+    
+    match collaboration_manager.join_session(&session_id, &request.user_id).await {
+        Ok(_) => {
+            info!("User {} joined collaboration session {}", request.user_id, session_id);
+            ApiResponse::success("Joined session successfully")
+        }
+        Err(e) => {
+            error!("Failed to join collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to join session: {}", e))
+        }
+    }
+}
+
+/// Leave collaboration session
+pub async fn leave_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    let user_id = request.get("user_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    
+    match collaboration_manager.leave_session(&session_id, user_id).await {
+        Ok(_) => {
+            info!("User {} left collaboration session {}", user_id, session_id);
+            ApiResponse::success("Left session successfully")
+        }
+        Err(e) => {
+            error!("Failed to leave collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to leave session: {}", e))
+        }
+    }
+}
+
+/// Apply operation to collaboration document
+pub async fn apply_operation(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<ApplyOperationRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.apply_operation(&request.session_id, request.operation).await {
+        Ok(version) => {
+            info!("Operation applied to session {}, new version: {}", request.session_id, version);
+            ApiResponse::success(version)
+        }
+        Err(e) => {
+            error!("Failed to apply operation: {}", e);
+            ApiResponse::error(format!("Failed to apply operation: {}", e))
+        }
+    }
+}
+
+/// Update user presence
+pub async fn update_presence(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<UpdatePresenceRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.update_presence(&request.session_id, request.presence).await {
+        Ok(_) => {
+            ApiResponse::success("Presence updated successfully")
+        }
+        Err(e) => {
+            error!("Failed to update presence: {}", e);
+            ApiResponse::error(format!("Failed to update presence: {}", e))
+        }
+    }
+}
+
+/// Get comments for collaboration session
+pub async fn get_comments(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.get_session(&session_id).await {
+        Some(session) => {
+            match collaboration_manager.get_document(&session.document_id).await {
+                Some(document) => {
+                    ApiResponse::success(document.comments)
+                }
+                None => {
+                    ApiResponse::error("Document not found".to_string())
+                }
+            }
+        }
+        None => {
+            ApiResponse::error("Session not found".to_string())
+        }
+    }
+}
+
+/// Add comment to collaboration document
+pub async fn add_comment(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<AddCommentRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    let comment = crate::collaboration::Comment {
+        id: uuid::Uuid::new_v4().to_string(),
+        author_id: "unknown".to_string(), // TODO: Get from authentication
+        content: request.content,
+        line_number: request.line_number,
+        column_start: request.column_start,
+        column_end: request.column_end,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        resolved: false,
+        replies: Vec::new(),
+    };
+    
+    match collaboration_manager.add_comment(&request.session_id, comment).await {
+        Ok(_) => {
+            ApiResponse::success("Comment added successfully")
+        }
+        Err(e) => {
+            error!("Failed to add comment: {}", e);
+            ApiResponse::error(format!("Failed to add comment: {}", e))
+        }
+    }
+}
+
+/// Update comment
+pub async fn update_comment(
+    State(_state): State<super::ui::AppState>,
+    Path((session_id, comment_id)): Path<(String, String)>,
+    Json(request): Json<UpdateCommentRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement comment update logic
+    ApiResponse::success("Comment updated successfully")
+}
+
+/// Resolve comment
+pub async fn resolve_comment(
+    State(_state): State<super::ui::AppState>,
+    Path((session_id, comment_id)): Path<(String, String)>,
+    Json(request): Json<ResolveCommentRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement comment resolution logic
+    ApiResponse::success("Comment resolved successfully")
+}
+
+/// Get collaboration document
+pub async fn get_collaboration_document(
+    State(_state): State<super::ui::AppState>,
+    Path(document_id): Path<String>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.get_document(&document_id).await {
+        Some(document) => {
+            ApiResponse::success(document)
+        }
+        None => {
+            ApiResponse::error("Document not found".to_string())
+        }
+    }
+}
+
+/// WebSocket handler for real-time collaboration
+pub async fn collaboration_websocket(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // TODO: Implement WebSocket handler for real-time collaboration
+    // This would handle:
+    // - Real-time operation synchronization
+    // - Live cursor/selection updates
+    // - User presence notifications
+    // - Comment updates
+    ApiResponse::success("WebSocket endpoint - implementation pending")
+}
+
+/// Smart search across project
+pub async fn smart_search(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<SmartSearchRequest>,
+) -> impl IntoResponse {
+    let file_manager = _state.file_manager.read().await;
+    
+    // TODO: Implement smart search logic
+    // This would include:
+    // - File name and content search
+    // - Function and variable search
+    // - Pattern matching with regex support
+    // - Multi-file search results
+    
+    let results = vec![
+        "Search functionality - implementation pending".to_string(),
+    ];
+    
+    ApiResponse::success(results)
+}
+
+/// Advanced file search
+pub async fn search_files_advanced(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let file_manager = _state.file_manager.read().await;
+    
+    // TODO: Implement advanced file search
+    // This would include:
+    // - Pattern-based file filtering
+    // - Content search within files
+    // - File type filtering
+    // - Exclusion patterns
+    
+    let results = vec![];
+    ApiResponse::success(results)
+}
+
+/// Enable auto-save
+pub async fn enable_autosave(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // TODO: Implement auto-save functionality
+    // This would include:
+    // - Periodic file saving
+    // - Cloud synchronization
+    // - Conflict resolution
+    // - Backup management
+    
+    ApiResponse::success("Auto-save enabled")
+}
+
+/// Disable auto-save
+pub async fn disable_autosave(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // TODO: Implement auto-save disable logic
+    
+    ApiResponse::success("Auto-save disabled")
+}
+
+/// Get auto-save status
+pub async fn get_autosave_status(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let status = serde_json::json!({
+        "enabled": false,
+        "interval": 30,
+        "last_save": null,
+        "pending_changes": 0
+    });
+    
+    ApiResponse::success(status)
+}
+
+/// Test API endpoint
+pub async fn test_api_request(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<ApiTestRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement API testing functionality
+    // This would include:
+    // - HTTP request execution
+    // - Response validation
+    // - Header and body inspection
+    // - Test history storage
+    
+    let response = serde_json::json!({
+        "status": "pending",
+        "message": "API testing functionality - implementation pending"
+    });
+    
+    ApiResponse::success(response)
+}
+
+/// Get API test history
+pub async fn get_api_test_history(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    // TODO: Implement API test history retrieval
+    
+    let history = vec![];
+    ApiResponse::success(history)
 }

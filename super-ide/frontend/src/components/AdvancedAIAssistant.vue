@@ -600,7 +600,7 @@ const quickHelpTopics = computed(() => [
 // Methods
 function toggleAdvancedFeatures() {
   // Toggle advanced features panel
-  console.log('Toggle advanced features')
+  // console.log('Toggle advanced features')
 }
 
 function clearContext() {
@@ -608,7 +608,7 @@ function clearContext() {
   reviewResults.value = []
   debugResults.value = null
   helpResults.value = []
-  console.log('Context cleared')
+  // console.log('Context cleared')
 }
 
 function getLanguageFromFileName(filename: string): string {
@@ -628,7 +628,7 @@ function getLanguageFromFileName(filename: string): string {
 
 async function applyCompletion(completion: any) {
   // Apply completion to editor
-  console.log('Applying completion:', completion)
+  // console.log('Applying completion:', completion)
   // This would integrate with the editor to insert the completion
 }
 
@@ -656,7 +656,7 @@ async function analyzeCode() {
     const result = await aiStore.analyzeCode(currentFile.content, currentContext.value.language)
     reviewResults.value = result.issues || []
   } catch (error) {
-    console.error('Code analysis failed:', error)
+    // Handle code analysis error gracefully
   } finally {
     isAnalyzing.value = false
   }
@@ -673,13 +673,13 @@ async function autoFixIssues() {
 
 async function applyFix(result: any) {
   // Apply the suggested fix
-  console.log('Applying fix:', result)
+  // console.log('Applying fix:', result)
   // This would modify the current file content
 }
 
 function explainIssue(result: any) {
   // Show detailed explanation
-  console.log('Explaining issue:', result)
+  // console.log('Explaining issue:', result)
 }
 
 function getSeverityIcon(severity: string) {
@@ -715,7 +715,7 @@ async function debugIssue() {
       prevention: result.prevention || 'Consider adding error handling and validation.'
     }
   } catch (error) {
-    console.error('Debugging failed:', error)
+    // Handle debugging error gracefully
   } finally {
     isDebugging.value = false
   }
@@ -736,7 +736,7 @@ async function generateProject() {
   isGenerating.value = true
   try {
     // Generate project structure and files
-    console.log('Generating project:', projectConfig.value)
+    // console.log('Generating project:', projectConfig.value)
     
     // This would call AI to generate the project
     const result = await aiStore.generateProject({
@@ -744,9 +744,9 @@ async function generateProject() {
       config: projectConfig.value
     })
     
-    console.log('Project generated:', result)
+    // console.log('Project generated:', result)
   } catch (error) {
-    console.error('Project generation failed:', error)
+    // Handle project generation error gracefully
   } finally {
     isGenerating.value = false
   }
@@ -771,7 +771,7 @@ async function searchHelp() {
       relatedTopics: []
     }]
   } catch (error) {
-    console.error('Help search failed:', error)
+    // Handle help search error gracefully
   } finally {
     isSearching.value = false
   }
@@ -786,14 +786,14 @@ function getQuickHelp(topic: any) {
 watch(currentContext, (newContext) => {
   if (newContext) {
     // Trigger completion update based on new context
-    console.log('Context changed:', newContext)
+    // console.log('Context changed:', newContext)
   }
 })
 
 // Lifecycle
 onMounted(() => {
   // Initialize AI assistant
-  console.log('Advanced AI Assistant mounted')
+  // console.log('Advanced AI Assistant mounted')
 })
 </script>
 

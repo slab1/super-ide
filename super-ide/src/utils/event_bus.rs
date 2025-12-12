@@ -96,7 +96,7 @@ pub enum AiResult {
 }
 
 /// Event bus error types
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum EventBusError {
     #[error("Channel closed")]
     ChannelClosed,
