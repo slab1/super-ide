@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Super IDE - AI-Powered Development Environment</title>
+    
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -228,12 +232,11 @@
             color: #D4D4D4;
             border: none;
             outline: none;
-            padding: 16px;
-            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: none;
-            overflow: auto;
+        }
+
+        .monaco-editor {
+            width: 100% !important;
+            height: 100% !important;
         }
 
         .ai-assistant {
@@ -419,39 +422,7 @@
 
             <!-- Editor -->
             <div class="editor-container">
-                <textarea class="editor" id="editor" placeholder="Start coding with AI assistance...">
-// Welcome to Super IDE - AI-Powered Development Environment
-// This intelligent IDE provides:
-
-fn main() {
-    println!("🚀 Super IDE Features:");
-    
-    // 🧠 AI-Powered Features
-    println!("   • Smart code completion and suggestions");
-    println!("   • Bug prediction and code smell detection");
-    println!("   • Auto-documentation generation");
-    println!("   • Unit test generation");
-    println!("   • Code translation between languages");
-    
-    // 🔍 Advanced Error & Debugging
-    println!("   • Visual debugger with breakpoints");
-    println!("   • Stack trace analysis with AI explanations");
-    println!("   • Performance profiling");
-    println!("   • Dependency vulnerability scanning");
-    
-    // 💬 AI Assistant
-    println!("   • Context-aware code suggestions");
-    println!("   • Voice coding support");
-    println!("   • Multi-file understanding");
-    println!("   • Learning from your coding style");
-    
-    println!("\\nHappy coding! 🎉");
-}
-
-// Try typing here and watch the AI suggestions appear...
-// The AI will learn from your coding patterns and provide
-// increasingly relevant suggestions as you work.
-                </textarea>
+                <div class="editor" id="editor"></div>
             </div>
 
             <!-- AI Assistant Panel -->
@@ -557,6 +528,33 @@ fn main() {
                 case 'bug_prediction':
                     updateBugPredictions(message.predictions);
                     break;
+                case 'ai_completion':
+                    // Handle AI completion for Monaco Editor
+                    if (window.editor && message.completions) {
+                        handleAICompletion(message.completions);
+                    }
+                    break;
+            }
+        }
+
+        // Handle AI completion in Monaco Editor
+        function handleAICompletion(completions) {
+            if (window.editor && completions.length > 0) {
+                const position = window.editor.getPosition();
+                const range = new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column);
+                
+                const suggestions = completions.map(completion => ({
+                    label: completion.text,
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: completion.text,
+                    detail: `AI Suggestion (${Math.round(completion.confidence * 100)}% confidence)`,
+                    sortText: 'Z', // Sort AI suggestions last
+                }));
+
+                // Show suggestions in Monaco Editor
+                window.editor.trigger('keyboard', 'editor.action.triggerSuggest', { 
+                    suggestions: suggestions 
+                });
             }
         }
         
@@ -591,21 +589,145 @@ fn main() {
             });
         }
         
-        // Setup editor features
+        // Setup Monaco Editor
         function setupEditor() {
-            const editor = document.getElementById('editor');
-            
-            editor.addEventListener('input', function() {
-                handleCodeChange();
+            // Monaco Editor configuration
+            require.config({ 
+                paths: { 
+                    'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' 
+                } 
             });
-            
-            editor.addEventListener('keydown', function(e) {
-                handleKeyPress(e);
+
+            require(['vs/editor/editor.main'], function() {
+                const initialCode = `// Welcome to Super IDE - AI-Powered Development Environment
+// This intelligent IDE provides:
+
+fn main() {
+    println!("🚀 Super IDE Features:");
+    
+    // 🧠 AI-Powered Features
+    println!("   • Smart code completion and suggestions");
+    println!("   • Bug prediction and code smell detection");
+    println!("   • Auto-documentation generation");
+    println!("   • Unit test generation");
+    println!("   • Code translation between languages");
+    
+    // 🔍 Advanced Error & Debugging
+    println!("   • Visual debugger with breakpoints");
+    println!("   • Stack trace analysis with AI explanations");
+    println!("   • Performance profiling");
+    println!("   • Dependency vulnerability scanning");
+    
+    // 💬 AI Assistant
+    println!("   • Context-aware code suggestions");
+    println!("   • Voice coding support");
+    println!("   • Multi-file understanding");
+    println!("   • Learning from your coding style");
+    
+    println!("\\nHappy coding! 🎉");
+}
+
+// Try typing here and watch the AI suggestions appear...
+// The AI will learn from your coding patterns and provide
+// increasingly relevant suggestions as you work.`;
+
+                window.editor = monaco.editor.create(document.getElementById('editor'), {
+                    value: initialCode,
+                    language: 'rust',
+                    theme: 'vs-dark',
+                    automaticLayout: true,
+                    minimap: { enabled: true },
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'off',
+                    folding: true,
+                    bracketMatching: 'always',
+                    autoClosingBrackets: 'always',
+                    autoClosingQuotes: 'always',
+                    formatOnPaste: true,
+                    formatOnType: true,
+                    suggestOnTriggerCharacters: true,
+                    quickSuggestions: true,
+                    parameterHints: { enabled: true },
+                    hover: { enabled: true },
+                    links: false,
+                    find: {
+                        addExtraSpaceOnTop: false,
+                        autoFindInSelection: 'never',
+                        seedSearchStringFromSelection: 'always',
+                    },
+                    tabSize: 4,
+                    insertSpaces: true,
+                    detectIndentation: true,
+                    rulers: [80],
+                    renderWhitespace: 'selection',
+                    renderControlCharacters: false,
+                    fontSize: 14,
+                    fontFamily: 'Fira Code, Monaco, Consolas, monospace',
+                    lineHeight: 22,
+                    letterSpacing: 0.5,
+                    fontLigatures: true,
+                });
+
+                // Setup event listeners for Monaco Editor
+                window.editor.onDidChangeModelContent(function() {
+                    handleCodeChange();
+                });
+
+                window.editor.onKeyDown(function(e) {
+                    handleKeyPress(e);
+                });
+
+                window.editor.onDidChangeCursorPosition(function() {
+                    updateCursorPosition();
+                });
+
+                // Register AI completion provider
+                monaco.languages.registerCompletionItemProvider('rust', {
+                    provideCompletionItems: function(model, position) {
+                        return requestAICompletion(model, position);
+                    }
+                });
+
+                monaco.languages.registerCompletionItemProvider('python', {
+                    provideCompletionItems: function(model, position) {
+                        return requestAICompletion(model, position);
+                    }
+                });
+
+                monaco.languages.registerCompletionItemProvider('javascript', {
+                    provideCompletionItems: function(model, position) {
+                        return requestAICompletion(model, position);
+                    }
+                });
+
+                console.log('Monaco Editor initialized successfully');
             });
-            
-            editor.addEventListener('cursorActivity', function() {
-                updateCursorPosition();
+        }
+
+        // Request AI completion from backend
+        function requestAICompletion(model, position) {
+            const textBeforeCursor = model.getValueInRange({
+                startLineNumber: 1,
+                startColumn: 1,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
             });
+
+            const language = model.getLanguageId();
+            
+            if (ws && ws.readyState === WebSocket.OPEN && aiEnabled) {
+                ws.send(JSON.stringify({
+                    type: 'request_completion',
+                    document_id: currentFile,
+                    cursor_position: { line: position.lineNumber, column: position.column },
+                    text_context: textBeforeCursor,
+                    language: language
+                }));
+            }
+
+            // Return empty suggestions for now, will be populated by WebSocket response
+            return { suggestions: [] };
         }
         
         // Handle code changes
@@ -619,16 +741,18 @@ fn main() {
         
         // Send code for AI analysis
         async function sendCodeForAnalysis() {
-            const editor = document.getElementById('editor');
-            const code = editor.value;
-            
-            if (ws && ws.readyState === WebSocket.OPEN && aiEnabled) {
-                ws.send(JSON.stringify({
-                    type: 'code_change',
-                    document_id: currentFile,
-                    content: code,
-                    position: getCursorPosition()
-                }));
+            if (window.editor) {
+                const code = window.editor.getValue();
+                
+                if (ws && ws.readyState === WebSocket.OPEN && aiEnabled) {
+                    ws.send(JSON.stringify({
+                        type: 'code_change',
+                        document_id: currentFile,
+                        content: code,
+                        position: getCursorPosition(),
+                        language: window.editor.getModel().getLanguageId()
+                    }));
+                }
             }
         }
         
@@ -669,29 +793,39 @@ fn main() {
         
         // Request auto-completion
         function requestCompletion() {
-            const editor = document.getElementById('editor');
-            const cursorPosition = editor.selectionStart;
-            const textBefore = editor.value.substring(0, cursorPosition);
-            const textAfter = editor.value.substring(cursorPosition);
-            
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'request_completion',
-                    document_id: currentFile,
-                    cursor_position: getCursorPosition(),
-                    text_context: textBefore
-                }));
+            if (window.editor) {
+                const position = window.editor.getPosition();
+                const model = window.editor.getModel();
+                const textBefore = model.getValueInRange({
+                    startLineNumber: 1,
+                    startColumn: 1,
+                    endLineNumber: position.lineNumber,
+                    endColumn: position.column
+                });
+                
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'request_completion',
+                        document_id: currentFile,
+                        cursor_position: getCursorPosition(),
+                        text_context: textBefore,
+                        language: model.getLanguageId()
+                    }));
+                }
             }
         }
         
         // Get cursor position
         function getCursorPosition() {
-            const editor = document.getElementById('editor');
-            const lines = editor.value.substring(0, editor.selectionStart).split('\\n');
-            return {
-                line: lines.length,
-                column: lines[lines.length - 1].length + 1
-            };
+            if (window.editor) {
+                const position = window.editor.getPosition();
+                return {
+                    line: position.lineNumber,
+                    column: position.column
+                };
+            } else {
+                return { line: 1, column: 1 };
+            }
         }
         
         // Update status bar
