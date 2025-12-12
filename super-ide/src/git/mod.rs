@@ -568,4 +568,266 @@ impl GitManager {
 
         Ok(())
     }
+
+    /// Push changes to remote repository
+    pub async fn push(&self, remote: Option<&str>, branch: Option<&str>) -> Result<String> {
+        let remote_arg = remote.unwrap_or("origin");
+        let branch_arg = branch.unwrap_or("HEAD");
+        
+        let output = Command::new("git")
+            .args(&["push", remote_arg, branch_arg])
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok("Push completed successfully".to_string())
+    }
+
+    /// Pull changes from remote repository
+    pub async fn pull(&self, remote: Option<&str>, branch: Option<&str>) -> Result<String> {
+        let remote_arg = remote.unwrap_or("origin");
+        let branch_arg = branch.unwrap_or("HEAD");
+        
+        let output = Command::new("git")
+            .args(&["pull", remote_arg, branch_arg])
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok("Pull completed successfully".to_string())
+    }
+
+    /// Get file diff
+    pub async fn get_diff(&self, file_path: Option<&str>, staged: bool) -> Result<GitDiff> {
+        let mut args = vec!["diff"];
+        if staged {
+            args.push("--staged");
+        }
+        if let Some(file) = file_path {
+            args.push(file);
+        }
+
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        let diff_content = String::from_utf8_lossy(&output.stdout).to_string();
+        
+        // Parse diff into hunks (simplified parsing)
+        let hunks = self.parse_diff_hunks(&diff_content);
+        
+        Ok(GitDiff {
+            file_path: file_path.unwrap_or("").to_string(),
+            old_content: String::new(), // Would need additional git command to get old content
+            new_content: diff_content,
+            hunks,
+        })
+    }
+
+    /// Get commit history
+    pub async fn get_log(&self, limit: u32) -> Result<Vec<GitCommit>> {
+        let output = Command::new("git")
+            .args(&["log", "--pretty=format:%H%n%an%n%ae%n%ad%n%s", &format!("-{}", limit)])
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        let log_content = String::from_utf8_lossy(&output.stdout);
+        let mut commits = Vec::new();
+        let lines: Vec<&str> = log_content.lines().collect();
+        
+        let mut i = 0;
+        while i < lines.len() {
+            if i + 4 < lines.len() {
+                let hash = lines[i].to_string();
+                let author = lines[i + 1].to_string();
+                let email = lines[i + 2].to_string();
+                let date_str = lines[i + 3].to_string();
+                let message = lines[i + 4].to_string();
+                
+                // Parse date (simplified)
+                let timestamp = Utc::now();
+                
+                commits.push(GitCommit {
+                    hash,
+                    message,
+                    author,
+                    email,
+                    timestamp,
+                    files_changed: Vec::new(), // Would need additional parsing
+                    insertions: 0,
+                    deletions: 0,
+                });
+                
+                i += 5; // Move to next commit
+            } else {
+                break;
+            }
+        }
+        
+        Ok(commits)
+    }
+
+    /// Stage specific files
+    pub async fn stage_files(&self, files: &[String]) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+
+        let mut args = vec!["add"];
+        args.extend(files.iter().map(|f| f.as_str()));
+
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok(())
+    }
+
+    /// Unstage specific files
+    pub async fn unstage_files(&self, files: &[String]) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+
+        let mut args = vec!["reset", "HEAD"];
+        args.extend(files.iter().map(|f| f.as_str()));
+
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok(())
+    }
+
+    /// Discard changes to specific files
+    pub async fn discard_changes(&self, files: &[String]) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+
+        let mut args = vec!["checkout", "--"];
+        args.extend(files.iter().map(|f| f.as_str()));
+
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok(())
+    }
+
+    /// Initialize a new git repository
+    pub async fn init(&self) -> Result<()> {
+        let output = Command::new("git")
+            .arg("init")
+            .current_dir(&self.repository_path)
+            .output()
+            .await?;
+
+        if !output.status.success() {
+            return Err(GitError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string()
+            ).into());
+        }
+
+        Ok(())
+    }
+
+    /// Parse diff hunks (simplified implementation)
+    fn parse_diff_hunks(&self, diff_content: &str) -> Vec<GitHunk> {
+        let mut hunks = Vec::new();
+        let lines: Vec<&str> = diff_content.lines().collect();
+        
+        let mut current_hunk = GitHunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 0,
+            new_lines: 0,
+            content: String::new(),
+        };
+
+        for line in lines {
+            if line.starts_with("@@") {
+                if !current_hunk.content.is_empty() {
+                    hunks.push(current_hunk);
+                }
+                
+                // Parse hunk header like @@ -1,3 +1,3 @@
+                if let Some(parts) = line.split_whitespace().nth(1) {
+                    if let Some((old_start, old_lines)) = parts.split(',').next().and_then(|s| s.strip_prefix('-')) {
+                        current_hunk.old_start = old_start.parse().unwrap_or(1);
+                        current_hunk.old_lines = old_lines.parse().unwrap_or(1);
+                    }
+                }
+                
+                if let Some(parts) = line.split_whitespace().nth(2) {
+                    if let Some((new_start, new_lines)) = parts.split(',').next().and_then(|s| s.strip_prefix('+')) {
+                        current_hunk.new_start = new_start.parse().unwrap_or(1);
+                        current_hunk.new_lines = new_lines.parse().unwrap_or(1);
+                    }
+                }
+                
+                current_hunk.content = line.to_string();
+            } else {
+                current_hunk.content.push_str("\n");
+                current_hunk.content.push_str(line);
+            }
+        }
+        
+        if !current_hunk.content.is_empty() {
+            hunks.push(current_hunk);
+        }
+        
+        hunks
+    }
 }

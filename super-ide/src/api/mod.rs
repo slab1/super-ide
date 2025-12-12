@@ -198,6 +198,16 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/git/status", get(git_status))
         .route("/git/branches", get(git_branches))
         .route("/git/commit", post(git_commit))
+        .route("/git/push", post(git_push))
+        .route("/git/pull", post(git_pull))
+        .route("/git/diff", get(git_diff))
+        .route("/git/log", get(git_log))
+        .route("/git/branch", post(git_create_branch))
+        .route("/git/checkout", post(git_checkout_branch))
+        .route("/git/stage", post(git_stage_files))
+        .route("/git/unstage", post(git_unstage_files))
+        .route("/git/discard", post(git_discard_changes))
+        .route("/git/init", post(git_init_repository))
         
         // Project operations
         .route("/project/info", get(project_info))
@@ -1219,6 +1229,284 @@ pub async fn git_commit(
         Err(e) => {
             error!("Git stage failed: {}", e);
             ApiResponse::error(format!("Git stage failed: {}", e))
+        }
+    }
+}
+
+// Enhanced Git Handlers
+
+/// Push changes to remote
+pub async fn git_push(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let remote = request.get("remote").and_then(|v| v.as_str());
+    let branch = request.get("branch").and_then(|v| v.as_str());
+    
+    match git_manager.push(remote, branch).await {
+        Ok(message) => {
+            info!("Git push successful");
+            ApiResponse::success(message)
+        }
+        Err(e) => {
+            error!("Git push failed: {}", e);
+            ApiResponse::error(format!("Git push failed: {}", e))
+        }
+    }
+}
+
+/// Pull changes from remote
+pub async fn git_pull(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let remote = request.get("remote").and_then(|v| v.as_str());
+    let branch = request.get("branch").and_then(|v| v.as_str());
+    
+    match git_manager.pull(remote, branch).await {
+        Ok(message) => {
+            info!("Git pull successful");
+            ApiResponse::success(message)
+        }
+        Err(e) => {
+            error!("Git pull failed: {}", e);
+            ApiResponse::error(format!("Git pull failed: {}", e))
+        }
+    }
+}
+
+/// Get file diff
+pub async fn git_diff(
+    State(_state): State<super::ui::AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let file_path = params.get("file").map(|s| s.as_str());
+    let staged = params.get("staged").and_then(|v| v.parse::<bool>().ok()).unwrap_or(false);
+    
+    match git_manager.get_diff(file_path, staged).await {
+        Ok(diff) => {
+            info!("Git diff retrieved successfully");
+            ApiResponse::success(diff)
+        }
+        Err(e) => {
+            error!("Git diff failed: {}", e);
+            ApiResponse::error(format!("Git diff failed: {}", e))
+        }
+    }
+}
+
+/// Get commit history
+pub async fn git_log(
+    State(_state): State<super::ui::AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let limit = params.get("limit").and_then(|v| v.parse::<u32>().ok()).unwrap_or(10);
+    
+    match git_manager.get_log(limit).await {
+        Ok(commits) => {
+            info!("Git log retrieved successfully: {} commits", commits.len());
+            ApiResponse::success(commits)
+        }
+        Err(e) => {
+            error!("Git log failed: {}", e);
+            ApiResponse::error(format!("Git log failed: {}", e))
+        }
+    }
+}
+
+/// Create a new branch
+pub async fn git_create_branch(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let branch_name = request.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    
+    if branch_name.is_empty() {
+        return ApiResponse::error("Branch name is required".to_string());
+    }
+    
+    match git_manager.create_branch(branch_name).await {
+        Ok(_) => {
+            info!("Git branch created successfully: {}", branch_name);
+            ApiResponse::success(format!("Branch '{}' created successfully", branch_name))
+        }
+        Err(e) => {
+            error!("Git branch creation failed: {}", e);
+            ApiResponse::error(format!("Git branch creation failed: {}", e))
+        }
+    }
+}
+
+/// Checkout a branch
+pub async fn git_checkout_branch(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let branch_name = request.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    
+    if branch_name.is_empty() {
+        return ApiResponse::error("Branch name is required".to_string());
+    }
+    
+    match git_manager.checkout_branch(branch_name).await {
+        Ok(_) => {
+            info!("Git branch checkout successful: {}", branch_name);
+            ApiResponse::success(format!("Switched to branch '{}'", branch_name))
+        }
+        Err(e) => {
+            error!("Git branch checkout failed: {}", e);
+            ApiResponse::error(format!("Git branch checkout failed: {}", e))
+        }
+    }
+}
+
+/// Stage specific files
+pub async fn git_stage_files(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.stage_files(&files).await {
+        Ok(_) => {
+            info!("Git files staged successfully: {} files", files.len());
+            ApiResponse::success(format!("Staged {} files successfully", files.len()))
+        }
+        Err(e) => {
+            error!("Git staging failed: {}", e);
+            ApiResponse::error(format!("Git staging failed: {}", e))
+        }
+    }
+}
+
+/// Unstage specific files
+pub async fn git_unstage_files(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.unstage_files(&files).await {
+        Ok(_) => {
+            info!("Git files unstaged successfully: {} files", files.len());
+            ApiResponse::success(format!("Unstaged {} files successfully", files.len()))
+        }
+        Err(e) => {
+            error!("Git unstaging failed: {}", e);
+            ApiResponse::error(format!("Git unstaging failed: {}", e))
+        }
+    }
+}
+
+/// Discard changes to specific files
+pub async fn git_discard_changes(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    let files = request.get("files")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
+        .unwrap_or_default();
+    
+    match git_manager.discard_changes(&files).await {
+        Ok(_) => {
+            info!("Git changes discarded successfully: {} files", files.len());
+            ApiResponse::success(format!("Discarded changes to {} files", files.len()))
+        }
+        Err(e) => {
+            error!("Git discard failed: {}", e);
+            ApiResponse::error(format!("Git discard failed: {}", e))
+        }
+    }
+}
+
+/// Initialize a new git repository
+pub async fn git_init_repository(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let git_manager = &_state.git_manager;
+    
+    match git_manager.init().await {
+        Ok(_) => {
+            info!("Git repository initialized successfully");
+            ApiResponse::success("Git repository initialized successfully")
+        }
+        Err(e) => {
+            error!("Git init failed: {}", e);
+            ApiResponse::error(format!("Git init failed: {}", e))
         }
     }
 }
