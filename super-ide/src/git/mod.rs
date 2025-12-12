@@ -76,7 +76,6 @@ pub struct GitDiff {
 
 /// Git diff hunk
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Clone)]
 pub struct GitHunk {
     pub old_start: u32,
     pub old_lines: u32,

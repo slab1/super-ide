@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{PathBuf, Path};
 use tokio::fs;
 use walkdir::WalkDir;
-use notify::{RecommendedWatcher, RecursiveMode, Event};
+use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event};
 use notify::event::{EventKind, ModifyKind};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -143,7 +143,7 @@ impl FileManager {
                 }
             },
             notify::Config::default()
-        ).map_err(|e| FileOperationError::WatchError(e.to_string()))?;
+        ).map_err(|e: notify::Error| FileOperationError::WatchError(e.to_string()))?;
 
         watcher
             .watch(&self.base_path, RecursiveMode::Recursive)
@@ -328,7 +328,7 @@ impl FileManager {
         {
             if let Ok(entry) = entry {
                 let path = entry.path();
-                let metadata = entry.metadata().unwrap_or_default();
+                let metadata = entry.metadata().map_err(|e| FileOperationError::Io(e))?;
                 let file_name = path.file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
@@ -402,7 +402,7 @@ impl FileManager {
                 };
 
                 if search_name.contains(&pattern) {
-                    let metadata = entry.metadata().unwrap_or_default();
+                    let metadata = entry.metadata().map_err(|e| FileOperationError::Io(e))?;
                     let relative_path = path.strip_prefix(&self.base_path).unwrap_or(path);
 
                     let file_info = FileInfo {
