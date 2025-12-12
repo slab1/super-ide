@@ -198,7 +198,7 @@ async fn handle_terminal_message(
             
             let terminal_manager = state.terminal_manager.write().await;
             
-            match terminal_manager.create_session(Some(format!("Terminal {}", actual_session_id))).await {
+            match terminal_manager.create_session(None, None, Some(format!("Terminal {}", actual_session_id))).await {
                 Ok(_session_id) => {
                     // Get output receiver for this session
                     let receiver = terminal_manager.get_output_receiver(&actual_session_id).await
