@@ -37,7 +37,7 @@
     <div class="w-80 border-l border-gray-700 flex flex-col">
       <!-- Panel Toggle -->
       <div class="p-2 border-b border-gray-700 bg-gray-800">
-        <div class="grid grid-cols-2 gap-1">
+        <div class="grid grid-cols-3 gap-1">
           <button
             @click="activePanel = 'ai'"
             :class="[
@@ -86,6 +86,18 @@
             <GraduationCap class="w-3 h-3 inline mr-1" />
             Learning
           </button>
+          <button
+            @click="activePanel = 'collaboration'"
+            :class="[
+              'px-2 py-2 rounded text-xs font-medium transition-colors',
+              activePanel === 'collaboration'
+                ? 'bg-teal-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            ]"
+          >
+            <Users class="w-3 h-3 inline mr-1" />
+            Collab
+          </button>
         </div>
       </div>
       
@@ -101,6 +113,7 @@
           @learning-mode-toggled="onLearningModeToggled"
           @help-requested="onHelpRequested"
         />
+        <CollaborationPanel v-if="activePanel === 'collaboration'" class="h-full" />
       </div>
     </div>
   </div>
@@ -108,7 +121,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileCode, Brain, GraduationCap, Code, GitBranch } from 'lucide-vue-next'
+import { FileCode, Brain, GraduationCap, Code, GitBranch, Users } from 'lucide-vue-next'
 import FileExplorer from './components/FileExplorer.vue'
 import CodeEditor from './components/CodeEditor.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
@@ -116,11 +129,12 @@ import AICodeIntelligencePanel from './components/AICodeIntelligencePanel.vue'
 import GitPanel from './components/GitPanel.vue'
 import SmartSnippets from './components/SmartSnippets.vue'
 import LearningPanel from './components/LearningPanel.vue'
+import CollaborationPanel from './components/CollaborationPanel.vue'
 import Toolbar from './components/Toolbar.vue'
 import type { FileTreeNode } from './types'
 
 const currentFile = ref<FileTreeNode | null>(null)
-const activePanel = ref<'ai' | 'git' | 'snippets' | 'learning'>('ai')
+const activePanel = ref<'ai' | 'git' | 'snippets' | 'learning' | 'collaboration'>('ai')
 
 function onFileSelected(file: FileTreeNode) {
   currentFile.value = file

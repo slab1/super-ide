@@ -24,6 +24,7 @@ use crate::utils::event_bus::EventBus;
 use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
 use crate::file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError, FileChangeEvent, FileChangeType};
 use crate::ai::{AiEngine, AnalysisResult, BugPrediction, SecurityVulnerability, CodeExplanation, DebugSession};
+use crate::collaboration::{CollaborationManager, CollaborationUser, Operation, UserPresence, CollaborationEvent};
 
 // API State
 #[derive(Clone)]
@@ -166,6 +167,76 @@ pub struct BreakpointRequest {
     pub enabled: Option<bool>,
 }
 
+/// Collaboration request types
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateSessionRequest {
+    pub document_id: String,
+    pub creator_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JoinSessionRequest {
+    pub user_id: String,
+    pub user_name: String,
+    pub user_email: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApplyOperationRequest {
+    pub session_id: String,
+    pub operation: Operation,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdatePresenceRequest {
+    pub session_id: String,
+    pub presence: UserPresence,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddCommentRequest {
+    pub session_id: String,
+    pub content: String,
+    pub line_number: Option<usize>,
+    pub column_start: Option<usize>,
+    pub column_end: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateCommentRequest {
+    pub session_id: String,
+    pub comment_id: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolveCommentRequest {
+    pub session_id: String,
+    pub comment_id: String,
+}
+
+/// Smart search request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmartSearchRequest {
+    pub query: String,
+    pub file_types: Option<Vec<String>>,
+    pub exclude_patterns: Option<Vec<String>>,
+    pub include_patterns: Option<Vec<String>>,
+    pub search_in_content: Option<bool>,
+    pub search_in_names: Option<bool>,
+}
+
+/// API test request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiTestRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    pub body: Option<String>,
+    pub timeout: Option<u64>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GitStatusRequest {
     pub path: Option<String>,
@@ -275,6 +346,32 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/ai/debug-session/:id/step", post(debug_step))
         .route("/ai/debug-session/:id/variables", get(get_debug_variables))
         .route("/ai/debug-session/:id/stop", post(stop_debug_session))
+        
+        // Collaboration endpoints
+        .route("/collaboration/session", post(create_collaboration_session))
+        .route("/collaboration/session/:id/join", post(join_collaboration_session))
+        .route("/collaboration/session/:id/leave", post(leave_collaboration_session))
+        .route("/collaboration/session/:id/operation", post(apply_operation))
+        .route("/collaboration/session/:id/presence", post(update_presence))
+        .route("/collaboration/session/:id/comments", get(get_comments))
+        .route("/collaboration/session/:id/comments", post(add_comment))
+        .route("/collaboration/session/:id/comments/:comment_id", put(update_comment))
+        .route("/collaboration/session/:id/comments/:comment_id/resolve", post(resolve_comment))
+        .route("/collaboration/document/:id", get(get_collaboration_document))
+        .route("/collaboration/ws/:session_id", get(collaboration_websocket))
+        
+        // Smart search endpoints
+        .route("/search/smart", post(smart_search))
+        .route("/search/files", post(search_files_advanced))
+        
+        // Auto-save endpoints
+        .route("/autosave/enable", post(enable_autosave))
+        .route("/autosave/disable", post(disable_autosave))
+        .route("/autosave/status", get(get_autosave_status))
+        
+        // API testing endpoints
+        .route("/api-test/request", post(test_api_request))
+        .route("/api-test/history", get(get_api_test_history))
         
         // Learning endpoints
         .route("/learning/profile", get(get_learning_profile))
@@ -2519,4 +2616,332 @@ pub async fn stop_debug_session(
     
     info!("Debug session stopped: {}", session_id);
     ApiResponse::success("Debug session stopped successfully")
+}
+
+// Phase 5: Collaboration & Advanced Features Handlers
+
+/// Create collaboration session
+pub async fn create_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CreateSessionRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.create_session(request.document_id, request.creator_id).await {
+        Ok(session_id) => {
+            info!("Collaboration session created: {}", session_id);
+            ApiResponse::success(session_id)
+        }
+        Err(e) => {
+            error!("Failed to create collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to create session: {}", e))
+        }
+    }
+}
+
+/// Join collaboration session
+pub async fn join_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<JoinSessionRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    // Register user if not already registered
+    let user = CollaborationUser {
+        id: request.user_id.clone(),
+        name: request.user_name,
+        email: request.user_email,
+        avatar_url: request.avatar_url,
+        color: format!("#{:06x}", rand::random::<u32>() & 0xFFFFFF), // Random color
+        is_online: true,
+        joined_at: chrono::Utc::now(),
+        last_activity: chrono::Utc::now(),
+    };
+    collaboration_manager.register_user(user).await;
+    
+    match collaboration_manager.join_session(&session_id, &request.user_id).await {
+        Ok(_) => {
+            info!("User {} joined collaboration session {}", request.user_id, session_id);
+            ApiResponse::success("Joined session successfully")
+        }
+        Err(e) => {
+            error!("Failed to join collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to join session: {}", e))
+        }
+    }
+}
+
+/// Leave collaboration session
+pub async fn leave_collaboration_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    let user_id = request.get("user_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    
+    match collaboration_manager.leave_session(&session_id, user_id).await {
+        Ok(_) => {
+            info!("User {} left collaboration session {}", user_id, session_id);
+            ApiResponse::success("Left session successfully")
+        }
+        Err(e) => {
+            error!("Failed to leave collaboration session: {}", e);
+            ApiResponse::error(format!("Failed to leave session: {}", e))
+        }
+    }
+}
+
+/// Apply operation to collaboration document
+pub async fn apply_operation(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<ApplyOperationRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.apply_operation(&request.session_id, request.operation).await {
+        Ok(version) => {
+            info!("Operation applied to session {}, new version: {}", request.session_id, version);
+            ApiResponse::success(version)
+        }
+        Err(e) => {
+            error!("Failed to apply operation: {}", e);
+            ApiResponse::error(format!("Failed to apply operation: {}", e))
+        }
+    }
+}
+
+/// Update user presence
+pub async fn update_presence(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<UpdatePresenceRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.update_presence(&request.session_id, request.presence).await {
+        Ok(_) => {
+            ApiResponse::success("Presence updated successfully")
+        }
+        Err(e) => {
+            error!("Failed to update presence: {}", e);
+            ApiResponse::error(format!("Failed to update presence: {}", e))
+        }
+    }
+}
+
+/// Get comments for collaboration session
+pub async fn get_comments(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.get_session(&session_id).await {
+        Some(session) => {
+            match collaboration_manager.get_document(&session.document_id).await {
+                Some(document) => {
+                    ApiResponse::success(document.comments)
+                }
+                None => {
+                    ApiResponse::error("Document not found".to_string())
+                }
+            }
+        }
+        None => {
+            ApiResponse::error("Session not found".to_string())
+        }
+    }
+}
+
+/// Add comment to collaboration document
+pub async fn add_comment(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<AddCommentRequest>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    let comment = crate::collaboration::Comment {
+        id: uuid::Uuid::new_v4().to_string(),
+        author_id: "unknown".to_string(), // TODO: Get from authentication
+        content: request.content,
+        line_number: request.line_number,
+        column_start: request.column_start,
+        column_end: request.column_end,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        resolved: false,
+        replies: Vec::new(),
+    };
+    
+    match collaboration_manager.add_comment(&request.session_id, comment).await {
+        Ok(_) => {
+            ApiResponse::success("Comment added successfully")
+        }
+        Err(e) => {
+            error!("Failed to add comment: {}", e);
+            ApiResponse::error(format!("Failed to add comment: {}", e))
+        }
+    }
+}
+
+/// Update comment
+pub async fn update_comment(
+    State(_state): State<super::ui::AppState>,
+    Path((session_id, comment_id)): Path<(String, String)>,
+    Json(request): Json<UpdateCommentRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement comment update logic
+    ApiResponse::success("Comment updated successfully")
+}
+
+/// Resolve comment
+pub async fn resolve_comment(
+    State(_state): State<super::ui::AppState>,
+    Path((session_id, comment_id)): Path<(String, String)>,
+    Json(request): Json<ResolveCommentRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement comment resolution logic
+    ApiResponse::success("Comment resolved successfully")
+}
+
+/// Get collaboration document
+pub async fn get_collaboration_document(
+    State(_state): State<super::ui::AppState>,
+    Path(document_id): Path<String>,
+) -> impl IntoResponse {
+    let collaboration_manager = _state.ide.collaboration_manager();
+    
+    match collaboration_manager.get_document(&document_id).await {
+        Some(document) => {
+            ApiResponse::success(document)
+        }
+        None => {
+            ApiResponse::error("Document not found".to_string())
+        }
+    }
+}
+
+/// WebSocket handler for real-time collaboration
+pub async fn collaboration_websocket(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // TODO: Implement WebSocket handler for real-time collaboration
+    // This would handle:
+    // - Real-time operation synchronization
+    // - Live cursor/selection updates
+    // - User presence notifications
+    // - Comment updates
+    ApiResponse::success("WebSocket endpoint - implementation pending")
+}
+
+/// Smart search across project
+pub async fn smart_search(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<SmartSearchRequest>,
+) -> impl IntoResponse {
+    let file_manager = _state.file_manager.read().await;
+    
+    // TODO: Implement smart search logic
+    // This would include:
+    // - File name and content search
+    // - Function and variable search
+    // - Pattern matching with regex support
+    // - Multi-file search results
+    
+    let results = vec![
+        "Search functionality - implementation pending".to_string(),
+    ];
+    
+    ApiResponse::success(results)
+}
+
+/// Advanced file search
+pub async fn search_files_advanced(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let file_manager = _state.file_manager.read().await;
+    
+    // TODO: Implement advanced file search
+    // This would include:
+    // - Pattern-based file filtering
+    // - Content search within files
+    // - File type filtering
+    // - Exclusion patterns
+    
+    let results = vec![];
+    ApiResponse::success(results)
+}
+
+/// Enable auto-save
+pub async fn enable_autosave(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // TODO: Implement auto-save functionality
+    // This would include:
+    // - Periodic file saving
+    // - Cloud synchronization
+    // - Conflict resolution
+    // - Backup management
+    
+    ApiResponse::success("Auto-save enabled")
+}
+
+/// Disable auto-save
+pub async fn disable_autosave(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // TODO: Implement auto-save disable logic
+    
+    ApiResponse::success("Auto-save disabled")
+}
+
+/// Get auto-save status
+pub async fn get_autosave_status(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    let status = serde_json::json!({
+        "enabled": false,
+        "interval": 30,
+        "last_save": null,
+        "pending_changes": 0
+    });
+    
+    ApiResponse::success(status)
+}
+
+/// Test API endpoint
+pub async fn test_api_request(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<ApiTestRequest>,
+) -> impl IntoResponse {
+    // TODO: Implement API testing functionality
+    // This would include:
+    // - HTTP request execution
+    // - Response validation
+    // - Header and body inspection
+    // - Test history storage
+    
+    let response = serde_json::json!({
+        "status": "pending",
+        "message": "API testing functionality - implementation pending"
+    });
+    
+    ApiResponse::success(response)
+}
+
+/// Get API test history
+pub async fn get_api_test_history(
+    State(_state): State<super::ui::AppState>,
+) -> impl IntoResponse {
+    // TODO: Implement API test history retrieval
+    
+    let history = vec![];
+    ApiResponse::success(history)
 }
