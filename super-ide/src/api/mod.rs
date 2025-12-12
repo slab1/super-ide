@@ -23,6 +23,7 @@ use chrono::Utc;
 use crate::utils::event_bus::EventBus;
 use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
 use crate::file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError, FileChangeEvent, FileChangeType};
+use crate::ai::{AiEngine, AnalysisResult, BugPrediction, SecurityVulnerability, CodeExplanation, DebugSession};
 
 // API State
 #[derive(Clone)]
@@ -84,6 +85,85 @@ pub struct CodeCompletionRequest {
     pub position: usize,
     pub language: String,
     pub file_path: Option<String>,
+}
+
+/// Advanced code analysis request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdvancedAnalysisRequest {
+    pub code: String,
+    pub language: String,
+    pub file_path: Option<String>,
+    pub include_bug_prediction: Option<bool>,
+    pub include_security_analysis: Option<bool>,
+    pub include_performance_analysis: Option<bool>,
+}
+
+/// Bug prediction request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BugPredictionRequest {
+    pub code: String,
+    pub language: String,
+}
+
+/// Security analysis request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecurityAnalysisRequest {
+    pub code: String,
+    pub language: String,
+}
+
+/// Code explanation request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeExplanationRequest {
+    pub code: String,
+    pub language: String,
+    pub context: Option<String>,
+    pub explanation_level: String,
+}
+
+/// Unit test generation request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TestGenerationRequest {
+    pub code: String,
+    pub language: String,
+    pub test_framework: Option<String>,
+}
+
+/// Code improvement request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeImprovementRequest {
+    pub code: String,
+    pub language: String,
+    pub improvement_type: Option<String>,
+}
+
+/// Debug session request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugSessionRequest {
+    pub file_path: String,
+    pub language: String,
+    pub initial_breakpoints: Option<Vec<usize>>,
+}
+
+/// Debug step request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugStepRequest {
+    pub action: String, // "step_over", "step_into", "step_out", "continue"
+    pub session_id: String,
+}
+
+/// Set breakpoints request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetBreakpointsRequest {
+    pub session_id: String,
+    pub breakpoints: Vec<BreakpointRequest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BreakpointRequest {
+    pub line: usize,
+    pub condition: Option<String>,
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -181,6 +261,20 @@ pub fn create_api_router(app_state: super::ui::AppState) -> Router<super::ui::Ap
         .route("/ai/security-analysis", post(security_analysis))
         .route("/ai/translate-languages", post(translate_languages))
         .route("/ai/code-metrics", post(code_metrics))
+        
+        // Phase 4: Enhanced Code Intelligence & Debugging
+        .route("/ai/advanced-analysis", post(advanced_code_analysis))
+        .route("/ai/bug-prediction", post(predict_bugs))
+        .route("/ai/security-vulnerabilities", post(analyze_security_vulnerabilities))
+        .route("/ai/code-explanation", post(explain_code))
+        .route("/ai/generate-tests", post(generate_unit_tests))
+        .route("/ai/code-improvements", post(suggest_improvements))
+        .route("/ai/debug-session/start", post(start_debug_session))
+        .route("/ai/debug-session/:id", get(get_debug_session))
+        .route("/ai/debug-session/:id/breakpoints", post(set_breakpoints))
+        .route("/ai/debug-session/:id/step", post(debug_step))
+        .route("/ai/debug-session/:id/variables", get(get_debug_variables))
+        .route("/ai/debug-session/:id/stop", post(stop_debug_session))
         
         // Learning endpoints
         .route("/learning/profile", get(get_learning_profile))
@@ -2138,4 +2232,291 @@ pub async fn get_achievements(
     ];
     
     ApiResponse::success(achievements)
+}
+
+// Phase 4: Enhanced Code Intelligence & Debugging Handlers
+
+/// Advanced code analysis with comprehensive analysis
+pub async fn advanced_code_analysis(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<AdvancedAnalysisRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.advanced_analyze_code(&request.code, &request.language, request.file_path.as_deref()).await {
+        Ok(analysis) => {
+            info!("Advanced code analysis completed for {} lines", request.code.lines().count());
+            ApiResponse::success(analysis)
+        }
+        Err(e) => {
+            error!("Advanced code analysis failed: {}", e);
+            ApiResponse::error(format!("Analysis failed: {}", e))
+        }
+    }
+}
+
+/// Predict potential bugs in code
+pub async fn predict_bugs(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<BugPredictionRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.predict_bugs(&request.code, &request.language).await {
+        Ok(predictions) => {
+            info!("Bug prediction completed, found {} potential issues", predictions.len());
+            ApiResponse::success(predictions)
+        }
+        Err(e) => {
+            error!("Bug prediction failed: {}", e);
+            ApiResponse::error(format!("Bug prediction failed: {}", e))
+        }
+    }
+}
+
+/// Analyze security vulnerabilities
+pub async fn analyze_security_vulnerabilities(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<SecurityAnalysisRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.analyze_security(&request.code, &request.language).await {
+        Ok(vulnerabilities) => {
+            info!("Security analysis completed, found {} vulnerabilities", vulnerabilities.len());
+            ApiResponse::success(vulnerabilities)
+        }
+        Err(e) => {
+            error!("Security analysis failed: {}", e);
+            ApiResponse::error(format!("Security analysis failed: {}", e))
+        }
+    }
+}
+
+/// Explain code functionality
+pub async fn explain_code(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CodeExplanationRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    let explanation_request = crate::ai::CodeExplanationRequest {
+        code: request.code,
+        language: request.language,
+        context: request.context,
+        explanation_level: match request.explanation_level.as_str() {
+            "basic" => crate::ai::ExplanationLevel::Basic,
+            "expert" => crate::ai::ExplanationLevel::Expert,
+            _ => crate::ai::ExplanationLevel::Detailed,
+        },
+    };
+    
+    match ai_engine.explain_code(explanation_request).await {
+        Ok(explanation) => {
+            info!("Code explanation completed");
+            ApiResponse::success(explanation)
+        }
+        Err(e) => {
+            error!("Code explanation failed: {}", e);
+            ApiResponse::error(format!("Code explanation failed: {}", e))
+        }
+    }
+}
+
+/// Generate unit tests for code
+pub async fn generate_unit_tests(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<TestGenerationRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.generate_tests(&request.code, &request.language).await {
+        Ok(test_code) => {
+            info!("Unit test generation completed");
+            ApiResponse::success(test_code)
+        }
+        Err(e) => {
+            error!("Unit test generation failed: {}", e);
+            ApiResponse::error(format!("Test generation failed: {}", e))
+        }
+    }
+}
+
+/// Suggest code improvements
+pub async fn suggest_improvements(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<CodeImprovementRequest>,
+) -> impl IntoResponse {
+    let ai_engine = _state.ide.ai_engine();
+    
+    match ai_engine.suggest_improvements(&request.code, &request.language).await {
+        Ok(suggestions) => {
+            info!("Code improvement suggestions completed, {} suggestions provided", suggestions.len());
+            ApiResponse::success(suggestions)
+        }
+        Err(e) => {
+            error!("Code improvement suggestions failed: {}", e);
+            ApiResponse::error(format!("Improvement suggestions failed: {}", e))
+        }
+    }
+}
+
+/// Start a debug session
+pub async fn start_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<DebugSessionRequest>,
+) -> impl IntoResponse {
+    let session_id = format!("debug_{}", chrono::Utc::now().timestamp());
+    
+    let debug_session = crate::ai::DebugSession {
+        session_id: session_id.clone(),
+        file_path: request.file_path,
+        breakpoints: request.initial_breakpoints.unwrap_or_default()
+            .into_iter()
+            .map(|line| crate::ai::Breakpoint {
+                id: format!("bp_{}", line),
+                line,
+                column: 1,
+                enabled: true,
+                condition: None,
+                hit_count: 0,
+            })
+            .collect(),
+        current_line: None,
+        variables: Vec::new(),
+        call_stack: Vec::new(),
+        is_active: true,
+    };
+    
+    info!("Debug session started: {}", session_id);
+    ApiResponse::success(debug_session)
+}
+
+/// Get debug session information
+pub async fn get_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // In a real implementation, this would retrieve the session from a store
+    let debug_session = crate::ai::DebugSession {
+        session_id,
+        file_path: "example.rs".to_string(),
+        breakpoints: vec![
+            crate::ai::Breakpoint {
+                id: "bp_10".to_string(),
+                line: 10,
+                column: 1,
+                enabled: true,
+                condition: None,
+                hit_count: 0,
+            }
+        ],
+        current_line: Some(10),
+        variables: vec![
+            crate::ai::DebugVariable {
+                name: "x".to_string(),
+                value: "42".to_string(),
+                type_name: "i32".to_string(),
+                scope: crate::ai::VariableScope::Local,
+                is_changed: false,
+            }
+        ],
+        call_stack: vec![
+            crate::ai::StackFrame {
+                function_name: "main".to_string(),
+                file_path: "example.rs".to_string(),
+                line: 10,
+                column: 1,
+                local_variables: Vec::new(),
+            }
+        ],
+        is_active: true,
+    };
+    
+    ApiResponse::success(debug_session)
+}
+
+/// Set breakpoints in debug session
+pub async fn set_breakpoints(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<SetBreakpointsRequest>,
+) -> impl IntoResponse {
+    if request.session_id != session_id {
+        return ApiResponse::error("Session ID mismatch".to_string());
+    }
+    
+    let breakpoints = request.breakpoints
+        .into_iter()
+        .map(|bp| crate::ai::Breakpoint {
+            id: format!("bp_{}", bp.line),
+            line: bp.line,
+            column: 1,
+            enabled: bp.enabled.unwrap_or(true),
+            condition: bp.condition,
+            hit_count: 0,
+        })
+        .collect();
+    
+    info!("Set {} breakpoints for session {}", breakpoints.len(), session_id);
+    ApiResponse::success(breakpoints)
+}
+
+/// Step through debug session
+pub async fn debug_step(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<DebugStepRequest>,
+) -> impl IntoResponse {
+    let action = request.action;
+    
+    // Simulate debug step
+    let result = match action.as_str() {
+        "step_over" => "Stepped over current line",
+        "step_into" => "Stepped into function",
+        "step_out" => "Stepped out of function",
+        "continue" => "Continued execution",
+        _ => "Unknown debug action",
+    };
+    
+    info!("Debug step: {} for session {}", action, request.session_id);
+    ApiResponse::success(result)
+}
+
+/// Get debug variables
+pub async fn get_debug_variables(
+    State(_state): State<super::ui::AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    // In a real implementation, this would get actual variables from the debug context
+    let variables = vec![
+        crate::ai::DebugVariable {
+            name: "result".to_string(),
+            value: "Some(42)".to_string(),
+            type_name: "Option<i32>".to_string(),
+            scope: crate::ai::VariableScope::Local,
+            is_changed: true,
+        },
+        crate::ai::DebugVariable {
+            name: "counter".to_string(),
+            value: "5".to_string(),
+            type_name: "i32".to_string(),
+            scope: crate::ai::VariableScope::Local,
+            is_changed: false,
+        },
+    ];
+    
+    ApiResponse::success(variables)
+}
+
+/// Stop debug session
+pub async fn stop_debug_session(
+    State(_state): State<super::ui::AppState>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let session_id = request.get("session_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    
+    info!("Debug session stopped: {}", session_id);
+    ApiResponse::success("Debug session stopped successfully")
 }

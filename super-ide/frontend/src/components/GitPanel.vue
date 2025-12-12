@@ -56,7 +56,7 @@
       </div>
 
       <div v-else-if="!isRepository" class="text-gray-500 text-sm p-4 text-center">
-        <Git class="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <GitBranch class="h-8 w-8 mx-auto mb-2 opacity-50" />
         <p>Initialize a git repository to start version control</p>
         <button 
           @click="initializeRepository"
@@ -213,7 +213,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { 
   RotateCcw, 
-  Git, 
   GitBranch, 
   AlertCircle, 
   CheckCircle, 

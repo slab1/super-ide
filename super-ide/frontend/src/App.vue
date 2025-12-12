@@ -91,7 +91,7 @@
       
       <!-- Panel Content -->
       <div class="flex-1 overflow-hidden">
-        <AdvancedAIAssistant v-if="activePanel === 'ai'" class="h-full" />
+        <AICodeIntelligencePanel v-if="activePanel === 'ai'" class="h-full" />
         <GitPanel v-if="activePanel === 'git'" class="h-full" />
         <SmartSnippets v-if="activePanel === 'snippets'" class="h-full" />
         <LearningPanel 
@@ -112,7 +112,7 @@ import { FileCode, Brain, GraduationCap, Code, GitBranch } from 'lucide-vue-next
 import FileExplorer from './components/FileExplorer.vue'
 import CodeEditor from './components/CodeEditor.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
-import AdvancedAIAssistant from './components/AdvancedAIAssistant.vue'
+import AICodeIntelligencePanel from './components/AICodeIntelligencePanel.vue'
 import GitPanel from './components/GitPanel.vue'
 import SmartSnippets from './components/SmartSnippets.vue'
 import LearningPanel from './components/LearningPanel.vue'
