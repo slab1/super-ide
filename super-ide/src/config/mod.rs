@@ -9,7 +9,7 @@ use config::{Config, Environment};
 use dirs;
 
 /// Configuration errors
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum ConfigError {
     #[error("File I/O error: {0}")]
     Io(#[from] std::io::Error),

@@ -6,8 +6,6 @@ use std::sync::Arc;
 use super_ide::{
     initialize, Configuration,
     ui::WebUI,
-
-
     utils::performance::global_performance_monitor,
     utils::file_manager::FileManager,
     config::AIProvider,

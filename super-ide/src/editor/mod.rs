@@ -13,7 +13,7 @@ use crate::ai::{AiEngine, CompletionRequest};
 
 
 /// Editor errors
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum EditorError {
     #[error("File not found: {0}")]
     FileNotFound(String),

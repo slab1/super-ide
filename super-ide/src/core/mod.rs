@@ -23,7 +23,7 @@ struct DocumentContext {
 pub type IdeResult<T> = Result<T, IdeError>;
 
 /// Main IDE errors
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum IdeError {
     #[error("Configuration error: {0}")]
     ConfigError(String),

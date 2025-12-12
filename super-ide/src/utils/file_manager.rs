@@ -8,7 +8,7 @@ use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind};
 use tokio::sync::mpsc;
 
 /// File management errors
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FileManagerError {
     #[error("File not found: {0}")]
     NotFound(String),
