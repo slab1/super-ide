@@ -186,7 +186,11 @@ impl ExternalManager {
     /// Check if MCP server is running
     pub async fn is_mcp_server_running(&self) -> bool {
         let mut process_lock = self.mcp_server_process.lock().await;
+<<<<<<< HEAD
         if let Some(ref mut child) = *process_lock {
+=======
+        if let Some(child) = process_lock.as_mut() {
+>>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
             matches!(child.try_wait(), Ok(None))
         } else {
             false
@@ -196,7 +200,11 @@ impl ExternalManager {
     /// Check if browser is running
     pub async fn is_browser_running(&self) -> bool {
         let mut process_lock = self.browser_process.lock().await;
+<<<<<<< HEAD
         if let Some(ref mut child) = *process_lock {
+=======
+        if let Some(child) = process_lock.as_mut() {
+>>>>>>> 65dd074b11ddb106add5c45f730538090bf98ea8
             matches!(child.try_wait(), Ok(None))
         } else {
             false

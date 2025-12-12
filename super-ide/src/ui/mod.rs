@@ -361,6 +361,7 @@ async fn get_ai_suggestion(
         context: payload.context,
         language: payload.language,
         max_tokens: None,
+        position: None,
     };
     
     match ai_engine.generate_completion(request).await {
@@ -541,12 +542,12 @@ async fn handle_client_message(message: ClientMessage, state: &AppState) {
         ClientMessage::SaveFeedback { suggestion_id, rating, accepted, context } => {
             // Implement user feedback functionality
             let _feedback = crate::ai::UserFeedback {
-                timestamp: chrono::Utc::now(),
                 suggestion_id: suggestion_id.clone(),
                 rating,
                 accepted,
                 context: context.clone(),
-                feedback_type: if accepted { "acceptance".to_string() } else { "rejection".to_string() },
+                timestamp: Some(chrono::Utc::now()),
+                feedback_type: Some(if accepted { "acceptance".to_string() } else { "rejection".to_string() }),
             };
             
             // Send feedback to AI engine for learning

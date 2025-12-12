@@ -194,6 +194,204 @@ export const useAIStore = defineStore('ai', {
       }
     },
 
+    // Advanced AI Features
+    async getSmartCompletions(filePath: string, content: string, position: any): Promise<CodeCompletion[]> {
+      try {
+        const response = await axios.post('/api/ai/smart-completions', {
+          filePath,
+          content,
+          position,
+          settings: this.settings
+        })
+
+        return response.data.suggestions || []
+      } catch (error) {
+        console.error('Failed to get smart completions:', error)
+        return []
+      }
+    },
+
+    async getCodeReview(code: string, language: string): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/code-review', {
+          code,
+          language
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get code review:', error)
+        throw error
+      }
+    },
+
+    async getDebuggingAssistance(code: string, language: string, issue?: string): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/debug-assistance', {
+          code,
+          language,
+          issue
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get debugging assistance:', error)
+        throw error
+      }
+    },
+
+    async generateProject(config: any): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/generate-project', config)
+        return response.data
+      } catch (error) {
+        console.error('Failed to generate project:', error)
+        throw error
+      }
+    },
+
+    async getContextAwareHelp(query: string, context: any): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/context-help', {
+          query,
+          context
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get context-aware help:', error)
+        throw error
+      }
+    },
+
+    async learnFromFeedback(pattern: string, wasPositive: boolean): Promise<void> {
+      try {
+        await axios.post('/api/ai/learning/feedback', {
+          pattern,
+          positive: wasPositive,
+          timestamp: new Date().toISOString()
+        })
+      } catch (error) {
+        console.error('Failed to send learning feedback:', error)
+      }
+    },
+
+    async optimizeCodeAdvanced(code: string, language: string, optimizationGoals: string[]): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/optimize-advanced', {
+          code,
+          language,
+          goals: optimizationGoals
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to optimize code:', error)
+        throw error
+      }
+    },
+
+    async getRefactoringSuggestions(code: string, language: string): Promise<any[]> {
+      try {
+        const response = await axios.post('/api/ai/refactoring-suggestions', {
+          code,
+          language
+        })
+
+        return response.data.suggestions || []
+      } catch (error) {
+        console.error('Failed to get refactoring suggestions:', error)
+        return []
+      }
+    },
+
+    async applyRefactoring(code: string, suggestion: any): Promise<string> {
+      try {
+        const response = await axios.post('/api/ai/apply-refactoring', {
+          code,
+          suggestion
+        })
+
+        return response.data.refactoredCode
+      } catch (error) {
+        console.error('Failed to apply refactoring:', error)
+        throw error
+      }
+    },
+
+    async generateTestsAdvanced(code: string, language: string, testTypes: string[]): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/generate-tests-advanced', {
+          code,
+          language,
+          testTypes
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to generate tests:', error)
+        throw error
+      }
+    },
+
+    async getPerformanceAnalysis(code: string, language: string): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/performance-analysis', {
+          code,
+          language
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get performance analysis:', error)
+        throw error
+      }
+    },
+
+    async getSecurityAnalysis(code: string, language: string): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/security-analysis', {
+          code,
+          language
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get security analysis:', error)
+        throw error
+      }
+    },
+
+    async translateBetweenLanguages(code: string, fromLanguage: string, toLanguage: string, preserveComments: boolean = true): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/translate-languages', {
+          code,
+          fromLanguage,
+          toLanguage,
+          preserveComments
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to translate code:', error)
+        throw error
+      }
+    },
+
+    async getCodeMetrics(code: string, language: string): Promise<any> {
+      try {
+        const response = await axios.post('/api/ai/code-metrics', {
+          code,
+          language
+        })
+
+        return response.data
+      } catch (error) {
+        console.error('Failed to get code metrics:', error)
+        throw error
+      }
+    },
+
     updateSettings(newSettings: Partial<typeof this.settings>) {
       this.settings = { ...this.settings, ...newSettings }
       // TODO: Save to local storage or server

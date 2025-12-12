@@ -490,6 +490,7 @@ impl Editor {
             prompt: format!("Complete code in {}: {}", context.language, context.text_before_cursor),
             context: context.text_before_cursor.clone(),
             language: context.language.clone(),
+            position: None,
             max_tokens: Some(50),
         };
 
@@ -497,12 +498,12 @@ impl Editor {
             // Convert AI suggestions to CompletionItem format
             for suggestion in &ai_response.suggestions {
                 completions.push(CompletionItem {
-                    label: suggestion.clone(),
+                    label: suggestion.text.clone(),
                     kind: CompletionKind::Snippet,
                     detail: Some("AI suggested".to_string()),
                     documentation: Some(format!("AI confidence: {:.1}%", ai_response.confidence * 100.0)),
-                    insert_text: suggestion.clone(),
-                    sort_text: format!("a{}", suggestion), // Sort AI suggestions first
+                    insert_text: suggestion.text.clone(),
+                    sort_text: format!("a{}", suggestion.text), // Sort AI suggestions first
                 });
             }
         }

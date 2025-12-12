@@ -172,7 +172,7 @@ pub struct AIInteraction {
 impl SuperIDE {
     /// Create a new IDE instance
     pub async fn new(config: Configuration) -> IdeResult<Self> {
-        let ai_engine = AiEngine::new(AiConfig::from(&config)).await.map_err(|e| IdeError::Editor(e.to_string()))?;
+        let ai_engine = AiEngine::new_async(AiConfig::from(&config)).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let editor = Editor::new(&config, Arc::new(ai_engine.clone())).await.map_err(|e| IdeError::Editor(e.to_string()))?;
         let event_bus = EventBus::new();
         
@@ -339,7 +339,7 @@ impl SuperIDE {
     
     /// Create a new terminal session
     pub async fn create_terminal(&self, title: Option<String>) -> IdeResult<String> {
-        self.terminal_manager.create_session(title).await
+        self.terminal_manager.create_session(Some("bash"), None, title).await
     }
     
     /// Start a terminal session
@@ -547,6 +547,7 @@ impl SuperIDE {
             prompt: format!("Provide code suggestions for: {}", context),
             context: context.to_string(),
             language: language.to_string(),
+            position: None,
             max_tokens: Some(100),
         };
 

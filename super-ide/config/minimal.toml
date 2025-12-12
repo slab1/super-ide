@@ -11,7 +11,8 @@ timezone = "UTC"
 [ai]
 provider = "openai"
 enable_local_inference = false
-model_path = "./models/local-ai"
+model_path = ""
+api_key = ""
 max_tokens = 4096
 temperature = 0.7
 cache_size = 128
@@ -47,26 +48,3 @@ accent_color = "#4ec9b0"
 background_color = "#1e1e1e"
 foreground_color = "#ffffff"
 syntax_highlighting = {}
-
-[collaboration]
-enable_real_time = false
-share_cursor_position = true
-share_selections = true
-max_collaborators = 10
-enable_voice_chat = false
-share_screenshots = false
-
-[security]
-scan_for_secrets = true
-local_llm_only = false
-encrypt_local_data = true
-secure_delete = true
-certificate_validation = true
-trusted_domains = []
-
-[plugins]
-enabled = true
-auto_update = true
-marketplace_url = "https://plugins.super-ide.dev"
-trust_level = "Verified"
-custom_plugins = []
