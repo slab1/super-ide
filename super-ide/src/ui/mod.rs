@@ -99,6 +99,7 @@ pub enum UiEvent {
 pub struct AppState {
     pub ide: Arc<SuperIDE>,
     pub file_manager: Arc<RwLock<FileManager>>,
+    pub git_manager: Arc<super::git::GitManager>,
     pub event_bus: Arc<EventBus>,
     pub event_sender: broadcast::Sender<UiEvent>,
 }
@@ -116,10 +117,15 @@ impl WebUI {
         let file_manager = Arc::new(RwLock::new(FileManager::default()));
         let event_bus = ide.event_bus().clone();
         
+        // Create Git manager with workspace path
+        let workspace_path = ide.config().read().unwrap().workspace_dir();
+        let git_manager = Arc::new(super::git::GitManager::new(workspace_path));
+        
         Self {
             app_state: AppState {
                 ide: ide.clone(),
                 file_manager,
+                git_manager,
                 event_bus,
                 event_sender,
             },

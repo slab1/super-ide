@@ -534,6 +534,39 @@
                         handleAICompletion(message.completions);
                     }
                     break;
+                case 'file_loaded':
+                    // Handle file loaded response
+                    if (window.editor && message.content) {
+                        const model = monaco.editor.createModel(message.content, getLanguageFromFilename(message.filename));
+                        window.editor.setModel(model);
+                        updateTabBar(message.filename);
+                        updateEditorLanguage(message.filename);
+                        updateStatusBar(`Loaded ${message.filename}`);
+                    }
+                    break;
+                case 'file_list':
+                    // Handle file list response
+                    renderFileTree(message.files);
+                    break;
+                case 'git_status':
+                    // Handle Git status response
+                    renderGitStatus(message);
+                    break;
+                case 'git_branch_changed':
+                    // Handle branch change
+                    updateStatusBar(`Switched to branch: ${message.branch}`);
+                    loadFiles(); // Refresh file list
+                    break;
+                case 'file_saved':
+                    // Handle file saved confirmation
+                    updateStatusBar(`Saved ${message.filename}`);
+                    removeTabModifiedIndicator();
+                    break;
+                case 'error':
+                    // Handle error messages
+                    updateStatusBar(`Error: ${message.message}`);
+                    console.error('Server error:', message.message);
+                    break;
             }
         }
 
@@ -561,11 +594,61 @@
         // Load file list
         async function loadFiles() {
             try {
+                // Request file list via WebSocket
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'load_files' }));
+                }
+                
+                // Fallback to HTTP API
                 const response = await fetch('/api/files');
                 const files = await response.json();
                 renderFileTree(files);
+                
+                // Also load Git status if available
+                loadGitStatus();
             } catch (error) {
                 console.error('Failed to load files:', error);
+                // Show error in file tree
+                const fileTree = document.getElementById('file-tree');
+                fileTree.innerHTML = '<div class="file-item" style="color: #F48771;">Failed to load files</div>';
+            }
+        }
+
+        // Load Git status
+        async function loadGitStatus() {
+            try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'git_status' }));
+                }
+                
+                const response = await fetch('/api/git/status');
+                const gitInfo = await response.json();
+                renderGitStatus(gitInfo);
+            } catch (error) {
+                console.log('Git not available or not a repository');
+            }
+        }
+
+        // Render Git status
+        function renderGitStatus(gitInfo) {
+            if (gitInfo && gitInfo.isRepository) {
+                // Update status bar with Git info
+                const statusRight = document.querySelector('.status-right');
+                const gitStatusItem = document.createElement('div');
+                gitStatusItem.className = 'status-item';
+                gitStatusItem.innerHTML = `
+                    <span>📋 ${gitInfo.currentBranch}</span>
+                    ${gitInfo.aheadCount > 0 ? `<span>↑${gitInfo.aheadCount}</span>` : ''}
+                    ${gitInfo.behindCount > 0 ? `<span>↓${gitInfo.behindCount}</span>` : ''}
+                `;
+                
+                // Add Git status to status bar
+                const existingGitItem = statusRight.querySelector('[data-git-status]');
+                if (existingGitItem) {
+                    existingGitItem.remove();
+                }
+                gitStatusItem.setAttribute('data-git-status', 'true');
+                statusRight.insertBefore(gitStatusItem, statusRight.firstChild);
             }
         }
         
@@ -574,19 +657,113 @@
             const fileTree = document.getElementById('file-tree');
             fileTree.innerHTML = '';
             
+            // Add refresh button
+            const refreshButton = document.createElement('div');
+            refreshButton.className = 'file-item';
+            refreshButton.innerHTML = `
+                <svg class="file-icon" viewBox="0 0 16 16">
+                    <path fill="currentColor" d="M8 3a5 5 0 0 0-4.546 2.916A5.986 5.986 0 0 0 8 1v2zm0 14V9.236a6.01 6.01 0 0 1 3.43-2.414A5.99 5.99 0 0 1 13 8a6.02 6.02 0 0 1-5 2.764V3z"/>
+                </svg>
+                <span>🔄 Refresh</span>
+            `;
+            refreshButton.onclick = loadFiles;
+            fileTree.appendChild(refreshButton);
+            
+            // Add file items
             files.forEach(file => {
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
-                fileItem.onclick = () => openFile(file.name);
+                fileItem.onclick = () => {
+                    if (file.is_directory) {
+                        // Handle directory navigation
+                        loadDirectory(file.path);
+                    } else {
+                        openFile(file.path);
+                    }
+                };
                 
-                const icon = file.is_file ? '📄' : '📁';
+                // Add Git status indicators
+                let gitIndicator = '';
+                if (file.git_status) {
+                    switch(file.git_status.status) {
+                        case 'M':
+                            gitIndicator = '🔴'; // Modified
+                            break;
+                        case 'A':
+                            gitIndicator = '🟢'; // Added
+                            break;
+                        case 'D':
+                            gitIndicator = '🟠'; // Deleted
+                            break;
+                        case '?':
+                            gitIndicator = '❓'; // Untracked
+                            break;
+                        default:
+                            gitIndicator = '';
+                    }
+                }
+                
+                const icon = file.is_directory ? '📁' : getFileIcon(file.name);
+                const statusClass = file.git_status ? ` git-${file.git_status.status}` : '';
+                
                 fileItem.innerHTML = `
-                    <span class="file-icon">${icon}</span>
-                    <span>${file.name}</span>
+                    <span class="file-icon ${file.is_directory ? 'file-folder' : 'file-code'}${statusClass}">${icon}</span>
+                    <span>${gitIndicator} ${file.name}</span>
+                    ${file.size ? `<span class="file-size">${formatFileSize(file.size)}</span>` : ''}
                 `;
                 
                 fileTree.appendChild(fileItem);
             });
+        }
+
+        // Get file icon based on extension
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const iconMap = {
+                'rs': '🦀', // Rust
+                'py': '🐍', // Python
+                'js': '🟨', // JavaScript
+                'ts': '🔷', // TypeScript
+                'java': '☕', // Java
+                'cpp': '⚙️', // C++
+                'c': '⚡', // C
+                'go': '🐹', // Go
+                'php': '🐘', // PHP
+                'rb': '💎', // Ruby
+                'swift': '🍎', // Swift
+                'kt': '🅺', // Kotlin
+                'scala': '🅢', // Scala
+                'sh': '💻', // Shell
+                'html': '🌐', // HTML
+                'css': '🎨', // CSS
+                'json': '📋', // JSON
+                'xml': '📄', // XML
+                'yaml': '📋', // YAML
+                'md': '📖', // Markdown
+                'txt': '📝', // Text
+                'gitignore': '🚫' // Git ignore
+            };
+            return iconMap[ext] || '📄';
+        }
+
+        // Format file size
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Load directory contents
+        async function loadDirectory(dirPath) {
+            try {
+                const response = await fetch(`/api/files/list?path=${encodeURIComponent(dirPath)}`);
+                const files = await response.json();
+                renderFileTree(files);
+            } catch (error) {
+                console.error('Failed to load directory:', error);
+            }
         }
         
         // Setup Monaco Editor
@@ -866,16 +1043,91 @@ fn main() {
             }
             
             try {
-                const response = await fetch(`/api/open/${encodeURIComponent(filename)}`);
+                // Send request to open file via WebSocket
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'open_file',
+                        filename: filename
+                    }));
+                }
+                
+                // Fallback to HTTP API
+                const response = await fetch(`/api/files/open`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+                
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result.success && result.content !== undefined) {
                     currentFile = filename;
-                    // Load file content into editor
+                    
+                    // Load file content into Monaco Editor
+                    if (window.editor) {
+                        const model = monaco.editor.createModel(result.content, getLanguageFromFilename(filename));
+                        window.editor.setModel(model);
+                    }
+                    
+                    // Update tab bar
                     updateTabBar(filename);
+                    
+                    // Update status
+                    updateStatusBar(`Opened ${filename}`);
+                    
+                    // Detect language and update editor settings
+                    updateEditorLanguage(filename);
+                } else {
+                    throw new Error(result.message || 'Failed to open file');
                 }
             } catch (error) {
                 console.error('Failed to open file:', error);
+                updateStatusBar(`Error opening file: ${error.message}`);
+            }
+        }
+
+        // Get language from filename
+        function getLanguageFromFilename(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const languageMap = {
+                'rs': 'rust',
+                'py': 'python',
+                'js': 'javascript',
+                'ts': 'typescript',
+                'java': 'java',
+                'cpp': 'cpp',
+                'cc': 'cpp',
+                'cxx': 'cpp',
+                'c': 'c',
+                'cs': 'csharp',
+                'go': 'go',
+                'php': 'php',
+                'rb': 'ruby',
+                'swift': 'swift',
+                'kt': 'kotlin',
+                'scala': 'scala',
+                'sh': 'shell',
+                'bash': 'shell',
+                'html': 'html',
+                'css': 'css',
+                'json': 'json',
+                'xml': 'xml',
+                'yaml': 'yaml',
+                'yml': 'yaml',
+                'md': 'markdown',
+                'txt': 'plaintext'
+            };
+            return languageMap[ext] || 'plaintext';
+        }
+
+        // Update editor language
+        function updateEditorLanguage(filename) {
+            if (window.editor) {
+                const language = getLanguageFromFilename(filename);
+                const model = window.editor.getModel();
+                monaco.editor.setModelLanguage(model, language);
             }
         }
         
@@ -969,6 +1221,110 @@ fn main() {
         // File operations
         function refreshFiles() {
             loadFiles();
+        }
+
+        // Git operations
+        async function commitChanges() {
+            const message = prompt('Enter commit message:');
+            if (message && message.trim()) {
+                try {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'git_commit',
+                            message: message.trim()
+                        }));
+                    }
+                    updateStatusBar('Committing changes...');
+                } catch (error) {
+                    updateStatusBar('Failed to commit: ' + error.message);
+                }
+            }
+        }
+
+        async function switchBranch(branchName) {
+            try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'git_checkout',
+                        branch: branchName
+                    }));
+                }
+                updateStatusBar(`Switching to branch: ${branchName}`);
+            } catch (error) {
+                updateStatusBar('Failed to switch branch: ' + error.message);
+            }
+        }
+
+        async function createBranch() {
+            const branchName = prompt('Enter new branch name:');
+            if (branchName && branchName.trim()) {
+                try {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'git_create_branch',
+                            branch: branchName.trim()
+                        }));
+                    }
+                    updateStatusBar(`Creating branch: ${branchName}`);
+                } catch (error) {
+                    updateStatusBar('Failed to create branch: ' + error.message);
+                }
+            }
+        }
+
+        async function showCommitHistory() {
+            try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'git_commits' }));
+                }
+                updateStatusBar('Loading commit history...');
+            } catch (error) {
+                updateStatusBar('Failed to load commit history: ' + error.message);
+            }
+        }
+
+        // Save file with backend integration
+        async function saveFile() {
+            if (!currentFile || !window.editor) {
+                updateStatusBar('No file to save');
+                return;
+            }
+
+            try {
+                const content = window.editor.getValue();
+                
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'save_file',
+                        filename: currentFile,
+                        content: content
+                    }));
+                }
+                
+                // Also use HTTP fallback
+                const response = await fetch(`/api/files/save`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        filename: currentFile, 
+                        content: content 
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateStatusBar(`Saved ${currentFile}`);
+                    removeTabModifiedIndicator();
+                } else {
+                    throw new Error(result.message || 'Failed to save file');
+                }
+            } catch (error) {
+                console.error('Failed to save file:', error);
+                updateStatusBar(`Error saving file: ${error.message}`);
+            }
         }
         
         function runCode() {

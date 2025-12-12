@@ -20,14 +20,16 @@ use tokio::sync::RwLock;
 use log::{info, warn, error};
 use chrono::Utc;
 
-use crate::utils::file_manager::{FileManager, DirEntry};
 use crate::utils::event_bus::EventBus;
+use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
+use crate::file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError, FileChangeEvent, FileChangeType};
 
 // API State
 #[derive(Clone)]
 pub struct ApiState {
     pub ide: Arc<super::core::SuperIDE>,
     pub file_manager: Arc<RwLock<FileManager>>,
+    pub git_manager: Arc<GitManager>,
     pub event_bus: Arc<EventBus>,
 }
 
@@ -252,8 +254,9 @@ pub async fn save_file(
     let path_buf = PathBuf::from(path);
     
     match file_manager.write_file(&path_buf, &request.content).await {
-        Ok(_) => {
-            info!("Successfully saved file: {}", path_buf.display());
+        Ok(result) => {
+            info!("Successfully saved file: {} ({} bytes)", path_buf.display(), 
+                  result.bytes_written.unwrap_or(0));
             
             // Notify other components about file change
             let _ = _state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
@@ -261,7 +264,8 @@ pub async fn save_file(
                 event_type: crate::utils::event_bus::FileEventType::Modified,
             });
             
-            ApiResponse::success("File saved successfully")
+            ApiResponse::success(format!("File saved successfully ({} bytes)", 
+                                        result.bytes_written.unwrap_or(0)))
         }
         Err(e) => {
             error!("Failed to save file {}: {}", path_buf.display(), e);
@@ -279,14 +283,15 @@ pub async fn create_file(
     let path_buf = PathBuf::from(&request.path);
     
     match if request.is_directory {
-        file_manager.create_dir(&path_buf).await
+        file_manager.create_directory(&path_buf).await
     } else {
         file_manager.create_file(&path_buf, request.content.as_deref()).await
     } {
-        Ok(_) => {
-            info!("Successfully created {}: {}", 
+        Ok(result) => {
+            info!("Successfully created {}: {} ({})", 
                 if request.is_directory { "directory" } else { "file" }, 
-                path_buf.display());
+                path_buf.display(),
+                result.message);
                 
             // Notify about file creation
             let _ = _state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
@@ -294,7 +299,7 @@ pub async fn create_file(
                 event_type: crate::utils::event_bus::FileEventType::Created,
             });
             
-            ApiResponse::success("Created successfully")
+            ApiResponse::success(format!("Created successfully: {}", result.message))
         }
         Err(e) => {
             error!("Failed to create {}: {}", path_buf.display(), e);
@@ -312,12 +317,12 @@ pub async fn delete_file(
     let path_buf = PathBuf::from(path);
     
     match if path_buf.is_dir() {
-        file_manager.remove_dir(&path_buf).await
+        file_manager.delete_directory(&path_buf).await
     } else {
         file_manager.delete_file(&path_buf).await
     } {
-        Ok(_) => {
-            info!("Successfully deleted: {}", path_buf.display());
+        Ok(result) => {
+            info!("Successfully deleted: {} ({})", path_buf.display(), result.message);
             
             // Notify about file deletion
             let _ = _state.event_bus.broadcast(crate::utils::event_bus::IdeEvent::FileChanged {
@@ -325,7 +330,7 @@ pub async fn delete_file(
                 event_type: crate::utils::event_bus::FileEventType::Deleted,
             });
             
-            ApiResponse::success("Deleted successfully")
+            ApiResponse::success(format!("Deleted successfully: {}", result.message))
         }
         Err(e) => {
             error!("Failed to delete {}: {}", path_buf.display(), e);
@@ -339,7 +344,7 @@ pub async fn get_file_tree(State(_state): State<super::ui::AppState>) -> impl In
     let file_manager = _state.file_manager.read().await;
     let workspace_path = _state.ide.config().read().await.workspace_dir();
     
-    match file_manager.list_dir(&workspace_path).await {
+    match file_manager.list_directory(&workspace_path).await {
         Ok(entries) => {
             let file_tree: Vec<FileTreeNode> = entries.into_iter()
                 .map(|entry| FileTreeNode::from(entry))
@@ -368,13 +373,21 @@ pub async fn search_files(
         return ApiResponse::error("Search pattern is required".to_string());
     }
     
-    match file_manager.search_files(&PathBuf::from(root), &pattern) {
+    match file_manager.search_files(&pattern, false) {
         Ok(paths) => {
             let search_results: Vec<SearchResult> = paths.into_iter()
-                .map(|path| SearchResult {
-                    path: path.to_string_lossy().to_string(),
-                    name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-                    size: path.metadata().map(|m| m.len()).unwrap_or(0),
+                .filter(|file_info| {
+                    // Filter by root if specified
+                    if root != "." {
+                        file_info.path.starts_with(&root)
+                    } else {
+                        true
+                    }
+                })
+                .map(|file_info| SearchResult {
+                    path: file_info.path.to_string_lossy().to_string(),
+                    name: file_info.name,
+                    size: file_info.size,
                 })
                 .collect();
             
@@ -1117,17 +1130,32 @@ pub async fn git_status(
     State(_state): State<super::ui::AppState>,
     Query(params): Query<GitStatusRequest>,
 ) -> impl IntoResponse {
-    let file_manager = _state.file_manager.read().await;
+    let git_manager = &_state.git_manager;
     let workspace_path = _state.ide.config().read().await.workspace_dir();
     
     let path = params.path.as_ref()
         .map(|p| PathBuf::from(p))
         .unwrap_or(workspace_path);
     
-    match file_manager.get_git_status(&path).await {
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    match git_manager.get_status().await {
         Ok(status) => {
-            info!("Git status retrieved for: {}", path.display());
-            ApiResponse::success(status.to_string())
+            info!("Git status retrieved successfully");
+            
+            // Convert GitStatus to a JSON-friendly format
+            let status_json = serde_json::json!({
+                "staged_files": status.staged_files,
+                "unstaged_files": status.unstaged_files,
+                "untracked_files": status.untracked_files,
+                "ahead_count": status.ahead_count,
+                "behind_count": status.behind_count
+            });
+            
+            ApiResponse::success(status_json)
         }
         Err(e) => {
             error!("Git status failed: {}", e);
@@ -1138,35 +1166,17 @@ pub async fn git_status(
 
 /// Get git branches
 pub async fn git_branches(State(_state): State<super::ui::AppState>) -> impl IntoResponse {
-    let workspace_path = _state.ide.config().read().await.workspace_dir();
+    let git_manager = &_state.git_manager;
     
-    match tokio::process::Command::new("git")
-        .args(&["branch", "-a", "--format=%(refname:short)%09%(objectname)%09%(committerdate:relative)%09%(subject)"])
-        .current_dir(&workspace_path)
-        .output()
-        .await
-    {
-        Ok(output) => {
-            if output.status.success() {
-                let branches: Vec<GitBranch> = String::from_utf8_lossy(&output.stdout)
-                    .lines()
-                    .filter(|line| !line.is_empty())
-                    .map(|line| {
-                        let parts: Vec<&str> = line.split('\t').collect();
-                        GitBranch {
-                            name: parts.get(0).unwrap_or(&"").to_string(),
-                            commit: parts.get(1).unwrap_or(&"").to_string(),
-                            date: parts.get(2).unwrap_or(&"").to_string(),
-                            message: parts.get(3).unwrap_or(&"").to_string(),
-                        }
-                    })
-                    .collect();
-                
-                info!("Retrieved {} git branches", branches.len());
-                ApiResponse::success(branches)
-            } else {
-                ApiResponse::error("Failed to get git branches".to_string())
-            }
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
+    
+    match git_manager.get_branches().await {
+        Ok(branches) => {
+            info!("Retrieved {} git branches", branches.len());
+            ApiResponse::success(branches)
         }
         Err(e) => {
             error!("Git branches failed: {}", e);
@@ -1180,33 +1190,25 @@ pub async fn git_commit(
     State(_state): State<super::ui::AppState>,
     Json(request): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let workspace_path = _state.ide.config().read().await.workspace_dir();
+    let git_manager = &_state.git_manager;
+    
+    // Check if this is a repository
+    if !git_manager.is_repository().await {
+        return ApiResponse::error("Not a git repository".to_string());
+    }
     
     let message = request.get("message")
         .and_then(|v| v.as_str())
         .unwrap_or("Commit from Super IDE");
     
-    match tokio::process::Command::new("git")
-        .args(&["add", "."])
-        .current_dir(&workspace_path)
-        .output()
-        .await
-    {
+    // First stage all changes, then commit
+    let all_files = vec![".".to_string()];
+    match git_manager.stage_files(&all_files).await {
         Ok(_) => {
-            match tokio::process::Command::new("git")
-                .args(&["commit", "-m", message])
-                .current_dir(&workspace_path)
-                .output()
-                .await
-            {
-                Ok(output) => {
-                    if output.status.success() {
-                        info!("Git commit successful: {}", message);
-                        ApiResponse::success("Commit successful")
-                    } else {
-                        let error_msg = String::from_utf8_lossy(&output.stderr);
-                        ApiResponse::error(format!("Commit failed: {}", error_msg))
-                    }
+            match git_manager.commit(message).await {
+                Ok(commit_hash) => {
+                    info!("Git commit successful: {} - {}", commit_hash, message);
+                    ApiResponse::success(format!("Commit successful: {}", commit_hash))
                 }
                 Err(e) => {
                     error!("Git commit failed: {}", e);
@@ -1215,8 +1217,8 @@ pub async fn git_commit(
             }
         }
         Err(e) => {
-            error!("Git add failed: {}", e);
-            ApiResponse::error(format!("Git add failed: {}", e))
+            error!("Git stage failed: {}", e);
+            ApiResponse::error(format!("Git stage failed: {}", e))
         }
     }
 }
@@ -1284,14 +1286,14 @@ pub struct FileTreeNode {
     pub children: Option<Vec<FileTreeNode>>,
 }
 
-impl From<DirEntry> for FileTreeNode {
-    fn from(entry: DirEntry) -> Self {
+impl From<FileInfo> for FileTreeNode {
+    fn from(entry: FileInfo) -> Self {
         Self {
             name: entry.name,
             path: entry.path.to_string_lossy().to_string(),
-            r#type: if entry.is_file { "file".to_string() } else { "directory".to_string() },
+            r#type: if entry.is_directory { "directory".to_string() } else { "file".to_string() },
             size: entry.size,
-            modified: entry.modified.to_rfc3339(),
+            modified: entry.modified_at.to_rfc3339(),
             children: None, // Will be populated recursively for directories
         }
     }

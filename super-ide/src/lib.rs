@@ -13,6 +13,8 @@ pub mod utils;
 pub mod terminal;
 pub mod external;
 pub mod learning;
+pub mod git;
+pub mod file_ops;
 
 // Re-export main components
 pub use core::{SuperIDE, IdeResult, IdeError};
@@ -20,6 +22,8 @@ pub use ai::{AiEngine, AiConfig};
 pub use editor::{Editor};
 pub use config::{Configuration};
 pub use terminal::{TerminalManager, TerminalSession, CommandExecutor, TerminalConfig, TerminalError};
+pub use git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
+pub use file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError};
 pub use learning::{
     LearningEngine, 
     AITutor, 
