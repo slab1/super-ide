@@ -7,7 +7,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use log::{info, debug, error};
+use log::debug;
+use base64::Engine;
 
 /// Browser automation request types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,7 +152,7 @@ impl BrowserClient {
             if let Some(data) = response.data {
                 if let Some(base64_str) = data.as_str() {
                     // Assume the response contains base64 encoded image data
-                    base64::decode(base64_str)
+                    base64::engine::general_purpose::STANDARD.decode(base64_str)
                         .map_err(|e| ExternalError::JsonError(format!("Invalid base64: {}", e)))
                 } else {
                     Err(ExternalError::BrowserError("Screenshot data is not a string".to_string()))
@@ -328,8 +329,9 @@ impl BrowserClient {
             .map_err(|e| ExternalError::HttpError(e.to_string()))?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            return Err(ExternalError::BrowserError(format!("HTTP {}: {}", response.status(), error_text)));
+            return Err(ExternalError::BrowserError(format!("HTTP {}: {}", status, error_text)));
         }
 
         let response_json: serde_json::Value = response

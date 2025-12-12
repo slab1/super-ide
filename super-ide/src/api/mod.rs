@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use tokio::sync::RwLock;
 use log::{info, warn, error};
 use chrono::Utc;
+use base64::Engine;
 
 use crate::utils::file_manager::{FileManager, DirEntry};
 use crate::utils::event_bus::EventBus;
@@ -753,7 +754,7 @@ pub async fn browser_screenshot(
         Ok(image_data) => {
             info!("Browser screenshot taken successfully");
             // Return base64 encoded image
-            let base64_data = base64::encode(&image_data);
+            let base64_data = base64::engine::general_purpose::STANDARD.encode(&image_data);
             ApiResponse::success(base64_data)
         }
         Err(e) => {
