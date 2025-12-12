@@ -623,7 +623,7 @@ function stopLivePreview(previewId: string): void {
 
 function resolveConflictManually(conflictId: string): void {
   // In real implementation, open manual conflict resolution modal
-  console.log('Opening manual conflict resolution for:', conflictId)
+  // console.log('Opening manual conflict resolution for:', conflictId)
 }
 
 function requestAIConflictResolution(conflictId: string): void {

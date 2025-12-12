@@ -142,15 +142,15 @@ function onFileSelected(file: FileTreeNode) {
 
 function onContentChanged(content: string) {
   // Handle content changes - could save to backend
-  console.log('Content changed:', content)
+  // console.log('Content changed:', content)
 }
 
 function onLearningModeToggled(active: boolean) {
-  console.log('Learning mode toggled:', active)
+  // console.log('Learning mode toggled:', active)
 }
 
 function onHelpRequested(context: any) {
-  console.log('Help requested:', context)
+  // console.log('Help requested:', context)
   // Switch to AI panel when help is requested
   activePanel.value = 'ai'
 }
