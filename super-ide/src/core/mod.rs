@@ -555,11 +555,13 @@ impl SuperIDE {
     /// Get AI code suggestions
     pub async fn get_ai_suggestions(&self, context: &str, language: &str) -> IdeResult<String> {
         let request = crate::ai::CompletionRequest {
-            prompt: format!("Provide code suggestions for: {}", context),
+            prompt: format!("Complete this {} code", language),
             context: context.to_string(),
             language: language.to_string(),
-            position: None,
             max_tokens: Some(100),
+            position: None,
+            cursor_position: None,
+            text_before_cursor: context.to_string(),
         };
 
         match self.ai_engine.generate_completion(request).await {

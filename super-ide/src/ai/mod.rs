@@ -9,6 +9,7 @@ use reqwest::{Client, header};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use lru::LruCache;
+use std::num::NonZeroUsize;
 
 // Import Configuration types for conversion
 use crate::config::{Configuration, AIProvider};
@@ -34,7 +35,7 @@ pub struct OpenAIRequest {
     pub stream: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAIMessage {
     pub role: String,
     pub content: String,
@@ -85,6 +86,7 @@ impl From<Configuration> for AiConfig {
             model_name: "default".to_string(), // Could be enhanced to use model_path
             temperature: config.ai.temperature,
             max_tokens: config.ai.max_tokens,
+            base_url: None,
         }
     }
 }
@@ -398,6 +400,8 @@ pub struct CompletionRequest {
     pub position: Option<(usize, usize)>,
     pub prompt: String,
     pub max_tokens: Option<u32>,
+    pub cursor_position: Option<(usize, usize)>,
+    pub text_before_cursor: String,
 }
 
 /// User feedback for AI learning
@@ -445,8 +449,8 @@ impl AiEngine {
             config,
             initialized: false,
             http_client,
-            request_cache: Arc::new(RwLock::new(lru::LruCache::new(100))),
-            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(50))),
+            request_cache: Arc::new(RwLock::new(lru::LruCache::new(NonZeroUsize::new(100).unwrap()))),
+            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(NonZeroUsize::new(50).unwrap()))),
         }
     }
 
@@ -562,7 +566,7 @@ impl AiEngine {
 
         if response.status().is_success() {
             let openai_response: OpenAIResponse = response.json().await?;
-            
+
             let completion_text = if let Some(choice) = openai_response.choices.first() {
                 choice.message.content.clone()
             } else {
@@ -575,10 +579,11 @@ impl AiEngine {
                 suggestions: vec![],
             })
         } else {
+            let status = response.status();
             let error_response: Result<OpenAIError, _> = response.json().await;
             match error_response {
                 Ok(error) => Err(anyhow::anyhow!("OpenAI API error: {}", error.error.message)),
-                Err(_) => Err(anyhow::anyhow!("OpenAI API request failed with status: {}", response.status())),
+                Err(_) => Err(anyhow::anyhow!("OpenAI API request failed with status: {}", status)),
             }
         }
     }
@@ -631,6 +636,11 @@ impl AiEngine {
                 issues: vec![],
                 suggestions: vec!["AI provider not supported".to_string()],
                 complexity_score: 0.5,
+                bug_predictions: vec![],
+                code_smells: vec![],
+                security_vulnerabilities: vec![],
+                performance_insights: vec![],
+                maintainability_score: 0.5,
             })
         }
     }
@@ -727,10 +737,11 @@ Code:
                 maintainability_score: self.calculate_maintainability_score(code),
             })
         } else {
+            let status = response.status();
             let error_response: Result<OpenAIError, _> = response.json().await;
             match error_response {
                 Ok(error) => Err(anyhow::anyhow!("OpenAI API error: {}", error.error.message)),
-                Err(_) => Err(anyhow::anyhow!("OpenAI API request failed with status: {}", response.status())),
+                Err(_) => Err(anyhow::anyhow!("OpenAI API request failed with status: {}", status)),
             }
         }
     }
@@ -944,6 +955,11 @@ Code:
                 issues: vec![], // TODO: Parse specific issues from AI response
                 suggestions,
                 complexity_score: self.calculate_complexity_score(code),
+                bug_predictions: vec![],
+                code_smells: vec![],
+                security_vulnerabilities: vec![],
+                performance_insights: vec![],
+                maintainability_score: self.calculate_maintainability_score(code),
             })
         } else {
             let error_response: Result<OpenAIError, _> = response.json().await;
@@ -970,6 +986,10 @@ Code:
                         message: "Consider using ? operator instead of unwrap()".to_string(),
                         line: 1,
                         column: 1,
+                        file_path: todo!(),
+                        rule_id: todo!(),
+                        fix_suggestion: todo!(),
+                        documentation_url: todo!(),
                     });
                 }
                 if code.contains("clone()") && code.contains("&") {
@@ -1002,6 +1022,11 @@ Code:
             issues,
             suggestions,
             complexity_score,
+            bug_predictions: vec![],
+            code_smells: vec![],
+            security_vulnerabilities: vec![],
+            performance_insights: vec![],
+            maintainability_score: self.calculate_maintainability_score(code),
         })
     }
 
@@ -1639,6 +1664,11 @@ impl RefactoringEngine {
             issues: vec![],
             suggestions: vec!["Consider extracting this function".to_string()],
             complexity_score: 0.7,
+            bug_predictions: vec![],
+            code_smells: vec![],
+            security_vulnerabilities: vec![],
+            performance_insights: vec![],
+            maintainability_score: 0.8,
         })
     }
 }
@@ -1656,6 +1686,11 @@ impl PerformanceAnalyzer {
             issues: vec![],
             suggestions: vec!["Consider optimizing this loop".to_string()],
             complexity_score: 0.6,
+            bug_predictions: vec![],
+            code_smells: vec![],
+            security_vulnerabilities: vec![],
+            performance_insights: vec![],
+            maintainability_score: 0.7,
         })
     }
 }
@@ -1673,6 +1708,11 @@ impl SecurityAnalyzer {
             issues: vec![],
             suggestions: vec!["Consider input validation".to_string()],
             complexity_score: 0.8,
+            bug_predictions: vec![],
+            code_smells: vec![],
+            security_vulnerabilities: vec![],
+            performance_insights: vec![],
+            maintainability_score: 0.9,
         })
     }
 }

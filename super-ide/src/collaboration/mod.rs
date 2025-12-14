@@ -160,7 +160,7 @@ pub struct CollaborationManager {
 }
 
 /// Individual collaboration session
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CollaborationSession {
     pub id: SessionId,
     pub document_id: DocumentId,
@@ -448,9 +448,9 @@ impl OperationalTransform {
                 }
             }
             (Operation::Insert { position: pos1, .. }, Operation::Delete { position: pos2, length, .. }) => {
-                if pos1 < *pos2 {
+                if pos1 < pos2 {
                     op1.clone()
-                } else if pos1 >= *pos2 + *length {
+                } else if pos1 >= pos2 + length {
                     Operation::Insert {
                         position: pos1 - length,
                         text: String::new(), // Will be filled by caller
@@ -460,7 +460,7 @@ impl OperationalTransform {
                 } else {
                     // Insert position is within deleted range, adjust to after deletion
                     Operation::Insert {
-                        position: *pos2,
+                        position: pos2,
                         text: String::new(), // Will be filled by caller
                         timestamp: Utc::now(),
                         user_id: String::new(), // Will be filled by caller
@@ -468,32 +468,32 @@ impl OperationalTransform {
                 }
             }
             (Operation::Delete { position: pos1, length: len1, .. }, Operation::Insert { position: pos2, .. }) => {
-                if pos1 <= *pos2 {
+                if pos1 <= pos2 {
                     op1.clone()
                 } else {
                     // Shift position if second operation inserts before first
                     Operation::Delete {
                         position: pos1 + 1,
-                        length: *len1,
+                        length: len1,
                         timestamp: Utc::now(),
                         user_id: String::new(), // Will be filled by caller
                     }
                 }
             }
             (Operation::Delete { position: pos1, length: len1, .. }, Operation::Delete { position: pos2, length: len2, .. }) => {
-                if pos1 + len1 <= *pos2 {
+                if pos1 + len1 <= pos2 {
                     op1.clone()
-                } else if *pos2 + *len2 <= pos1 {
+                } else if pos2 + len2 <= pos1 {
                     Operation::Delete {
                         position: pos1 - len2,
-                        length: *len1,
+                        length: len1,
                         timestamp: Utc::now(),
                         user_id: String::new(), // Will be filled by caller
                     }
                 } else {
                     // Overlapping deletions
-                    let start = pos1.min(*pos2);
-                    let end = (pos1 + len1).max(*pos2 + *len2);
+                    let start = pos1.min(pos2);
+                    let end = (pos1 + len1).max(pos2 + len2);
                     Operation::Delete {
                         position: start,
                         length: end - start,

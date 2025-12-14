@@ -22,7 +22,7 @@ use chrono::Utc;
 use base64::Engine;
 
 use crate::utils::event_bus::EventBus;
-use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitBranch, GitError};
+use crate::git::{GitManager, GitRepository, GitStatus, GitCommit, GitError};
 use crate::file_ops::{FileManager, FileInfo, ProjectStructure, FileOperationResult, FileOperationError, FileChangeEvent, FileChangeType};
 use crate::ai::{AiEngine, AnalysisResult, BugPrediction, SecurityVulnerability, CodeExplanation, DebugSession};
 use crate::collaboration::{CollaborationManager, CollaborationUser, Operation, UserPresence, CollaborationEvent};
@@ -611,14 +611,26 @@ pub async fn ai_chat(
     Json(request): Json<AIChatRequest>,
 ) -> impl IntoResponse {
     let ai_engine = _state.ide.ai_engine();
-    
+
+    // Extract language and content from request
+    let language = request.context.as_ref()
+        .and_then(|ctx| ctx.language.as_ref())
+        .cloned()
+        .unwrap_or_else(|| "rust".to_string());
+    let content = request.context.as_ref()
+        .and_then(|ctx| ctx.file_content.as_ref())
+        .cloned()
+        .unwrap_or_else(|| "".to_string());
+
     // Create AI completion request
     let completion_request = crate::ai::CompletionRequest {
-        prompt: request.message,
-        context: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
-        language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
-        max_tokens: request.settings.and_then(|s| s.max_tokens),
+        prompt: format!("Complete this {} code", language),
+        context: content.clone(),
+        language: language.clone(),
+        max_tokens: Some(100),
         position: None,
+        cursor_position: None,
+        text_before_cursor: content,
     };
     
     match ai_engine.generate_completion(completion_request).await {
@@ -696,6 +708,8 @@ pub async fn smart_completions(
         language: get_language_from_file_path(file_path),
         max_tokens: Some(200),
         position: None,
+        cursor_position: None,
+        text_before_cursor: content,
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -786,6 +800,8 @@ pub async fn debug_assistance(
         language: language.to_string(),
         max_tokens: Some(1000),
         position: None,
+        cursor_position: None,
+        text_before_cursor: code.to_string(),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -859,6 +875,8 @@ pub async fn context_help(
         language: "rust".to_string(),
         max_tokens: Some(800),
         position: None,
+        cursor_position: None,
+        text_before_cursor: "".to_string(),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -924,6 +942,8 @@ pub async fn optimize_advanced(
         language: language.to_string(),
         max_tokens: Some(1500),
         position: None,
+        cursor_position: None,
+        text_before_cursor: code.to_string(),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -1024,6 +1044,8 @@ pub async fn generate_tests_advanced(
         language: language.to_string(),
         max_tokens: Some(2000),
         position: None,
+        cursor_position: None,
+        text_before_cursor: code.to_string(),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -1156,6 +1178,8 @@ pub async fn translate_languages(
         language: from_language.to_string(),
         max_tokens: Some(2000),
         position: None,
+        cursor_position: None,
+        text_before_cursor: code.to_string(),
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -2256,6 +2280,8 @@ pub async fn tutor_chat(
         language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
         max_tokens: request.settings.and_then(|s| s.max_tokens),
         position: None,
+        cursor_position: None,
+        text_before_cursor: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
     };
     
     match ai_engine.generate_completion(completion_request).await {

@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{PathBuf, Path};
 use tokio::fs;
 use walkdir::WalkDir;
-use notify::{RecommendedWatcher, RecursiveMode, Event};
+use notify::{RecommendedWatcher, RecursiveMode, Event, Watcher};
 use notify::event::{EventKind, ModifyKind};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -178,7 +178,7 @@ impl FileManager {
             fs::create_dir_all(parent).await?;
         }
 
-        let bytes_written = fs::write(&full_path, content).await?;
+        let _bytes_written = fs::write(&full_path, content).await?;
         
         Ok(FileOperationResult {
             success: true,
@@ -328,13 +328,17 @@ impl FileManager {
         {
             if let Ok(entry) = entry {
                 let path = entry.path();
-                let metadata = entry.metadata().unwrap_or_default();
                 let file_name = path.file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
 
                 let relative_path = path.strip_prefix(&self.base_path).unwrap_or(path);
-                
+
+                let metadata = match entry.metadata() {
+                    Ok(m) => m,
+                    Err(_) => continue, // Skip files we can't read metadata for
+                };
+
                 let file_info = FileInfo {
                     path: relative_path.to_path_buf(),
                     name: file_name.to_string(),
@@ -402,7 +406,10 @@ impl FileManager {
                 };
 
                 if search_name.contains(&pattern) {
-                    let metadata = entry.metadata().unwrap_or_default();
+                    let metadata = match entry.metadata() {
+                        Ok(m) => m,
+                        Err(_) => continue, // Skip files we can't read metadata for
+                    };
                     let relative_path = path.strip_prefix(&self.base_path).unwrap_or(path);
 
                     let file_info = FileInfo {

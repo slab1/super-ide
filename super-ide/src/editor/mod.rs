@@ -487,11 +487,13 @@ impl Editor {
 
         // First try AI-powered completions
         let ai_request = CompletionRequest {
-            prompt: format!("Complete code in {}: {}", context.language, context.text_before_cursor),
-            context: context.text_before_cursor.clone(),
             language: context.language.clone(),
-            position: None,
-            max_tokens: Some(50),
+            context: context.text_before_cursor.clone(),
+            position: Some((context.cursor_position.line, context.cursor_position.column)),
+            prompt: format!("Complete this {} code: {}", context.language, context.text_before_cursor),
+            max_tokens: Some(100),
+            cursor_position: Some((context.cursor_position.line, context.cursor_position.column)),
+            text_before_cursor: context.text_before_cursor.clone(),
         };
 
         if let Ok(ai_response) = self.ai_engine.generate_completion(ai_request).await {

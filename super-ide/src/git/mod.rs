@@ -487,25 +487,7 @@ impl GitManager {
         Ok(branches)
     }
 
-    /// Stage files for commit
-    pub async fn stage_files(&self, files: &[String]) -> Result<()> {
-        let mut command = Command::new("git");
-        command.arg("add").current_dir(&self.repository_path);
 
-        for file in files {
-            command.arg(file);
-        }
-
-        let output = command.output().await?;
-
-        if !output.status.success() {
-            return Err(GitError::CommandFailed(
-                String::from_utf8_lossy(&output.stderr).to_string()
-            ).into());
-        }
-
-        Ok(())
-    }
 
     /// Create a commit
     pub async fn commit(&self, message: &str) -> Result<String> {
