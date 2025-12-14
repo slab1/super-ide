@@ -11,7 +11,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::process::Command;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 
 /// Git repository information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -342,7 +342,7 @@ impl GitManager {
             message,
             author,
             email,
-            timestamp: Utc.timestamp_opt(timestamp, 0).unwrap(),
+            timestamp: Utc.timestamp(timestamp, 0).unwrap(),
             files_changed,
             insertions,
             deletions,
@@ -389,7 +389,7 @@ impl GitManager {
                     message,
                     author,
                     email,
-                    timestamp: Utc.timestamp_opt(timestamp, 0).unwrap(),
+                    timestamp: Utc.timestamp(timestamp, 0).unwrap(),
                     files_changed: Vec::new(),
                     insertions: 0,
                     deletions: 0,
@@ -677,7 +677,7 @@ impl GitManager {
     }
 
     /// Stage specific files
-    pub async fn stage_files(&self, files: &[String]) -> Result<()> {
+    pub async fn stage_files_optimized(&self, files: &[String]) -> Result<()> {
         if files.is_empty() {
             return Ok(());
         }
@@ -786,16 +786,20 @@ impl GitManager {
                 
                 // Parse hunk header like @@ -1,3 +1,3 @@
                 if let Some(parts) = line.split_whitespace().nth(1) {
-                    if let Some((old_start, old_lines)) = parts.split(',').next().and_then(|s| s.strip_prefix('-')) {
-                        current_hunk.old_start = old_start.parse().unwrap_or(1);
-                        current_hunk.old_lines = old_lines.parse().unwrap_or(1);
+                    if let Some(parts) = parts.split(',').next().and_then(|s| s.strip_prefix('-')) {
+                        if let Some((old_start, old_lines)) = parts.split_once(',') {
+                            current_hunk.old_start = old_start.parse().unwrap_or(1);
+                            current_hunk.old_lines = old_lines.parse().unwrap_or(1);
+                        }
                     }
                 }
                 
                 if let Some(parts) = line.split_whitespace().nth(2) {
-                    if let Some((new_start, new_lines)) = parts.split(',').next().and_then(|s| s.strip_prefix('+')) {
-                        current_hunk.new_start = new_start.parse().unwrap_or(1);
-                        current_hunk.new_lines = new_lines.parse().unwrap_or(1);
+                    if let Some(parts) = parts.split(',').next().and_then(|s| s.strip_prefix('+')) {
+                        if let Some((new_start, new_lines)) = parts.split_once(',') {
+                            current_hunk.new_start = new_start.parse().unwrap_or(1);
+                            current_hunk.new_lines = new_lines.parse().unwrap_or(1);
+                        }
                     }
                 }
                 
@@ -807,7 +811,7 @@ impl GitManager {
         }
         
         if !current_hunk.content.is_empty() {
-            hunks.push(current_hunk);
+            hunks.push(current_hunk.clone());
         }
         
         hunks

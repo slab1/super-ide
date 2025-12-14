@@ -141,6 +141,7 @@ async fn main() -> Result<()> {
         ide: Arc::new(ide.clone()),
         file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
         event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+        git_manager: Arc::new(super_ide::utils::git_manager::GitManager::new()),
     };
     
     // Start web UI with API integration
@@ -656,6 +657,7 @@ async fn run_server(args: &Args, port: u16, bind: &str) -> Result<()> {
         ide: Arc::new(ide.clone()),
         file_manager: Arc::new(tokio::sync::RwLock::new(file_manager)),
         event_bus: Arc::new(super_ide::utils::event_bus::EventBus::new()),
+        git_manager: Arc::new(super_ide::utils::git_manager::GitManager::new()),
     };
     
     // Start web UI

@@ -368,6 +368,8 @@ async fn get_ai_suggestion(
         language: payload.language,
         max_tokens: None,
         position: None,
+        cursor_position: None,
+        text_before_cursor: String::new(),
     };
     
     match ai_engine.generate_completion(request).await {

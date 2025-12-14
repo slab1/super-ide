@@ -559,9 +559,9 @@ impl SuperIDE {
             context: context.to_string(),
             language: language.to_string(),
             max_tokens: Some(100),
+            cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+            text_before_cursor: "",
             position: None,
-            cursor_position: None,
-            text_before_cursor: context.to_string(),
         };
 
         match self.ai_engine.generate_completion(request).await {

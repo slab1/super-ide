@@ -86,7 +86,6 @@ impl From<Configuration> for AiConfig {
             model_name: "default".to_string(), // Could be enhanced to use model_path
             temperature: config.ai.temperature,
             max_tokens: config.ai.max_tokens,
-            base_url: None,
         }
     }
 }
@@ -449,8 +448,8 @@ impl AiEngine {
             config,
             initialized: false,
             http_client,
-            request_cache: Arc::new(RwLock::new(lru::LruCache::new(NonZeroUsize::new(100).unwrap()))),
-            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(NonZeroUsize::new(50).unwrap()))),
+            request_cache: Arc::new(RwLock::new(lru::LruCache::new(100))),
+            analysis_cache: Arc::new(RwLock::new(lru::LruCache::new(50))),
         }
     }
 
@@ -476,9 +475,9 @@ impl AiEngine {
         // Check cache first
         let cache_key = format!("{}:{}:{}", request.language, request.cursor_position.unwrap_or((0, 0)).0, request.text_before_cursor);
         {
-            let cache = self.request_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
-                return Ok(cached.clone());
+            let mut cache = self.request_cache.write().await;
+            if let Some(cached) = cache.get(&cache_key).cloned() {
+                return Ok(cached);
             }
         }
 
@@ -986,10 +985,6 @@ Code:
                         message: "Consider using ? operator instead of unwrap()".to_string(),
                         line: 1,
                         column: 1,
-                        file_path: todo!(),
-                        rule_id: todo!(),
-                        fix_suggestion: todo!(),
-                        documentation_url: todo!(),
                     });
                 }
                 if code.contains("clone()") && code.contains("&") {

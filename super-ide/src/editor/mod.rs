@@ -494,6 +494,8 @@ impl Editor {
             max_tokens: Some(100),
             cursor_position: Some((context.cursor_position.line, context.cursor_position.column)),
             text_before_cursor: context.text_before_cursor.clone(),
+            cursor_position: None,
+            text_before_cursor: context.text_before_cursor.clone(),
         };
 
         if let Ok(ai_response) = self.ai_engine.generate_completion(ai_request).await {

@@ -624,13 +624,13 @@ pub async fn ai_chat(
 
     // Create AI completion request
     let completion_request = crate::ai::CompletionRequest {
-        prompt: format!("Complete this {} code", language),
-        context: content.clone(),
-        language: language.clone(),
-        max_tokens: Some(100),
+        prompt: request.message,
+        context: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
+        language: request.context.as_ref().and_then(|ctx| ctx.language.as_ref()).cloned().unwrap_or_else(|| "rust".to_string()),
+        max_tokens: request.settings.and_then(|s| s.max_tokens),
         position: None,
-        cursor_position: None,
-        text_before_cursor: content,
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.generate_completion(completion_request).await {
@@ -800,8 +800,8 @@ pub async fn debug_assistance(
         language: language.to_string(),
         max_tokens: Some(1000),
         position: None,
-        cursor_position: None,
-        text_before_cursor: code.to_string(),
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -875,8 +875,8 @@ pub async fn context_help(
         language: "rust".to_string(),
         max_tokens: Some(800),
         position: None,
-        cursor_position: None,
-        text_before_cursor: "".to_string(),
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -942,8 +942,8 @@ pub async fn optimize_advanced(
         language: language.to_string(),
         max_tokens: Some(1500),
         position: None,
-        cursor_position: None,
-        text_before_cursor: code.to_string(),
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -1037,15 +1037,19 @@ pub async fn generate_tests_advanced(
         "Generate comprehensive tests for this {} code. Test types: {:?}\n\nCode:\n{}\n\nProvide test files with proper assertions.",
         language, test_types_str, code
     );
-    
+
     let completion_request = crate::ai::CompletionRequest {
-        prompt,
-        context: code.to_string(),
         language: language.to_string(),
-        max_tokens: Some(2000),
+        context: code.to_string(),
         position: None,
+        prompt,
+        max_tokens: None,
         cursor_position: None,
         text_before_cursor: code.to_string(),
+        max_tokens: Some(2000),
+        position: None,
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -1178,8 +1182,8 @@ pub async fn translate_languages(
         language: from_language.to_string(),
         max_tokens: Some(2000),
         position: None,
-        cursor_position: None,
-        text_before_cursor: code.to_string(),
+        cursor_position: request.context.as_ref().and_then(|ctx| ctx.cursor_position),
+        text_before_cursor: "",
     };
     
     match ai_engine.complete_code(completion_request).await {
@@ -1811,7 +1815,7 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct GitBranch {
+pub struct GitBranchInfo {
     pub name: String,
     pub commit: String,
     pub date: String,
@@ -2281,7 +2285,7 @@ pub async fn tutor_chat(
         max_tokens: request.settings.and_then(|s| s.max_tokens),
         position: None,
         cursor_position: None,
-        text_before_cursor: request.context.as_ref().and_then(|ctx| ctx.file_content.as_ref()).cloned().unwrap_or_default(),
+        text_before_cursor: "",
     };
     
     match ai_engine.generate_completion(completion_request).await {
